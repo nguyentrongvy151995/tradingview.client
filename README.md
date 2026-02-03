@@ -1,46 +1,262 @@
-# Getting Started with Create React App
+# 📊 TradingView Dashboard với Webhook Alert System
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Full-stack application để xem TradingView charts và nhận alerts từ TradingView qua webhooks.
 
-## Available Scripts
+![TradingView Dashboard](https://img.shields.io/badge/TradingView-Integration-blue)
+![React](https://img.shields.io/badge/React-18.3.1-61DAFB?logo=react)
+![TypeScript](https://img.shields.io/badge/TypeScript-4.9.5-3178C6?logo=typescript)
+![Node.js](https://img.shields.io/badge/Node.js-Express-339933?logo=node.js)
 
-In the project directory, you can run:
+## ✨ Features
 
-### `npm start`
+### Frontend
+- 📈 **TradingView Widget** - Embed advanced charts với full customization
+- 🔔 **Alerts Dashboard** - Xem và quản lý alerts từ TradingView
+- 🎨 **Customizable** - Thay đổi symbol, interval, theme
+- 📊 **Statistics** - Xem thống kê alerts theo symbol, signal
+- 🔄 **Auto Refresh** - Tự động cập nhật alerts mỗi 5 giây
+- 📱 **Responsive** - Mobile-friendly design
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+### Backend
+- 🎣 **Webhook Endpoint** - Nhận alerts từ TradingView
+- 💾 **SQLite Database** - Lưu trữ alerts lâu dài
+- 📡 **RESTful API** - CRUD operations cho alerts
+- 📊 **Analytics** - API thống kê và filter
+- 🔒 **CORS Enabled** - Hỗ trợ cross-origin requests
 
-The page will reload if you make edits.\
-You will also see any lint errors in the console.
+## 🚀 Quick Start
 
-### `npm test`
+### 1. Install Dependencies
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+```bash
+npm install
+cd server && npm install && cd ..
+```
 
-### `npm run build`
+### 2. Start Backend Server
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+```bash
+npm run server
+```
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+Server: `http://localhost:3001`
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+### 3. Start Frontend
 
-### `npm run eject`
+```bash
+npm start
+```
 
-**Note: this is a one-way operation. Once you `eject`, you can’t go back!**
+Frontend: `http://localhost:3000`
 
-If you aren’t satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+### 4. (Optional) Chạy cả 2 cùng lúc
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
+```bash
+npm run dev
+```
 
-You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
+## 📖 Documentation
 
-## Learn More
+- **[SETUP_GUIDE.md](SETUP_GUIDE.md)** - Hướng dẫn setup chi tiết, ngrok, TradingView alerts
+- **[TRADINGVIEW_WEBHOOK_GUIDE.md](TRADINGVIEW_WEBHOOK_GUIDE.md)** - Chi tiết về webhook system
+- **[TRADINGVIEW_EXAMPLES.md](TRADINGVIEW_EXAMPLES.md)** - Pine Script examples (RSI, MACD, MA Cross, etc.)
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+## 🎯 Usage
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+### Xem Charts
+
+1. Mở frontend: `http://localhost:3000`
+2. Click tab **"📈 Chart"**
+3. Nhập symbol (VD: `BINANCE:BTCUSDT`, `NASDAQ:AAPL`)
+4. Chọn interval và theme
+
+### Nhận Alerts từ TradingView
+
+1. **Expose server với ngrok:**
+   ```bash
+   ngrok http 3001
+   ```
+   
+2. **Tạo alert trên TradingView:**
+   - Vào https://www.tradingview.com
+   - Tạo alert với webhook URL: `https://your-ngrok-url.ngrok.io/webhook/tradingview`
+   - Message format:
+     ```json
+     {
+       "symbol": "{{ticker}}",
+       "price": {{close}},
+       "indicator": "RSI",
+       "signal": "BUY",
+       "message": "{{ticker}} at {{close}}"
+     }
+     ```
+
+3. **Xem alerts:**
+   - Click tab **"🔔 Alerts"** trong frontend
+   - Alerts sẽ hiển thị realtime
+
+### Test Webhook (không cần TradingView)
+
+```bash
+curl -X POST http://localhost:3001/webhook/tradingview \
+  -H "Content-Type: application/json" \
+  -d '{
+    "symbol": "BTCUSDT",
+    "price": 45000,
+    "indicator": "RSI",
+    "signal": "BUY",
+    "message": "Test alert"
+  }'
+```
+
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      TradingView.com                        │
+│              (Pine Script + Alert Webhooks)                 │
+└────────────────────────┬────────────────────────────────────┘
+                         │ POST /webhook/tradingview
+                         ↓
+┌─────────────────────────────────────────────────────────────┐
+│                    Backend Server                           │
+│              (Node.js + Express + SQLite)                   │
+│  • Webhook endpoint                                         │
+│  • RESTful API                                              │
+│  • Database storage                                         │
+└────────────────────────┬────────────────────────────────────┘
+                         │ GET /api/alerts
+                         ↓
+┌─────────────────────────────────────────────────────────────┐
+│                  Frontend Dashboard                         │
+│              (React + TypeScript)                           │
+│  • TradingView Widget                                       │
+│  • Alerts Panel                                             │
+│  • Statistics                                               │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## 📁 Project Structure
+
+```
+binance-client/
+├── src/
+│   ├── App.tsx                      # Main app với tabs
+│   ├── TradingViewWidget.tsx        # TradingView chart component
+│   ├── components/
+│   │   ├── AlertsPanel.tsx          # Alerts dashboard
+│   │   └── AlertsPanel.css
+│   └── ...
+├── server/
+│   ├── index.js                     # Backend server
+│   ├── package.json
+│   └── tradingview_alerts.db        # SQLite database (auto-created)
+├── SETUP_GUIDE.md                   # Setup instructions
+├── TRADINGVIEW_WEBHOOK_GUIDE.md     # Webhook details
+├── TRADINGVIEW_EXAMPLES.md          # Pine Script examples
+└── README.md                        # This file
+```
+
+## 🎨 Screenshots
+
+### Chart View
+- Customizable TradingView chart
+- Symbol, interval, theme controls
+
+### Alerts View
+- Real-time alerts display
+- Filter by symbol
+- Statistics cards
+- Auto refresh
+
+## 📊 API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/webhook/tradingview` | Nhận webhook từ TradingView |
+| GET | `/api/alerts` | Lấy danh sách alerts |
+| GET | `/api/alerts?symbol=BTCUSDT` | Filter theo symbol |
+| GET | `/api/alerts/:id` | Lấy alert cụ thể |
+| DELETE | `/api/alerts/:id` | Xóa alert |
+| GET | `/api/alerts/stats/summary` | Thống kê alerts |
+| GET | `/health` | Health check |
+
+## 🔐 Security
+
+Để production, nên thêm authentication:
+
+```javascript
+// server/index.js
+const SECRET = process.env.WEBHOOK_SECRET || 'your-secret';
+
+app.post('/webhook/tradingview', (req, res) => {
+  if (req.query.token !== SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  // ... process webhook
+});
+```
+
+TradingView URL: `https://your-server.com/webhook/tradingview?token=your-secret`
+
+## 🚀 Deployment
+
+### Backend
+- **Heroku** - Free tier available
+- **Railway** - Easy deploy
+- **DigitalOcean** - VPS option
+- **AWS Lambda** - Serverless
+
+### Frontend
+- **Vercel** - Recommended (best for React)
+- **Netlify** - Easy deploy
+- **GitHub Pages** - Static hosting
+
+## 💡 Use Cases
+
+- 📊 **Alert Dashboard** - Centralize all trading signals
+- 🤖 **Trading Bot** - Auto-execute trades based on signals
+- 📈 **Backtesting** - Analyze strategy performance
+- 📧 **Notifications** - Forward to Telegram, Discord, Email
+- 📱 **Mobile App** - Build mobile version with React Native
+
+## 🎓 Learning Resources
+
+- [TradingView Webhooks](https://www.tradingview.com/support/solutions/43000529348-i-want-to-know-more-about-webhooks/)
+- [Pine Script Docs](https://www.tradingview.com/pine-script-docs/)
+- [React Documentation](https://reactjs.org/)
+- [Express.js Guide](https://expressjs.com/)
+
+## ⚠️ TradingView Limits
+
+| Plan | Active Alerts |
+|------|---------------|
+| FREE | 1 alert |
+| PRO | 20 alerts |
+| PRO+ | 100 alerts |
+| PREMIUM | 400 alerts |
+
+## 🤝 Contributing
+
+Contributions welcome! Feel free to:
+- Add new features
+- Improve documentation
+- Report bugs
+- Submit PRs
+
+## 📝 License
+
+MIT License
+
+## 🆘 Support
+
+Có vấn đề? Check documentation:
+1. [SETUP_GUIDE.md](SETUP_GUIDE.md) - Setup issues
+2. [TRADINGVIEW_WEBHOOK_GUIDE.md](TRADINGVIEW_WEBHOOK_GUIDE.md) - Webhook problems
+3. [TRADINGVIEW_EXAMPLES.md](TRADINGVIEW_EXAMPLES.md) - Pine Script help
+
+---
+
+**Built with ❤️ for traders**
+
+🚀 Happy Trading! 📈
