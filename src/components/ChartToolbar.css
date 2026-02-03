@@ -1,0 +1,163 @@
+.chart-toolbar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 200px;
+  background: #1e222d;
+  border-right: 1px solid #2b2f3a;
+  display: flex;
+  flex-direction: column;
+  z-index: 1000;
+  transition: width 0.3s ease;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.chart-toolbar.collapsed {
+  width: 50px;
+}
+
+/* Header */
+.toolbar-header {
+  padding: 10px;
+  border-bottom: 1px solid #2b2f3a;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.toolbar-collapse-btn {
+  background: #2b2f3a;
+  border: none;
+  color: #d1d4dc;
+  width: 30px;
+  height: 30px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.toolbar-collapse-btn:hover {
+  background: #363a45;
+  color: #f7931a;
+}
+
+/* Toolbar Items */
+.toolbar-items {
+  flex: 1;
+  padding: 10px 0;
+  overflow-y: auto;
+}
+
+.toolbar-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 15px;
+  cursor: pointer;
+  color: #d1d4dc;
+  transition: all 0.2s;
+  position: relative;
+  gap: 12px;
+  user-select: none;
+}
+
+.toolbar-item:hover {
+  background: #2b2f3a;
+  color: #fff;
+}
+
+.toolbar-item.active {
+  background: #f7931a;
+  color: #000;
+  font-weight: bold;
+}
+
+.toolbar-icon {
+  font-size: 18px;
+  min-width: 20px;
+  text-align: center;
+}
+
+.toolbar-label {
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.collapsed .toolbar-item {
+  justify-content: center;
+  padding: 12px 15px;
+}
+
+/* Tooltip for collapsed mode */
+.toolbar-tooltip {
+  position: absolute;
+  left: 100%;
+  margin-left: 10px;
+  background: #2b2f3a;
+  border: 1px solid #363a45;
+  border-radius: 4px;
+  padding: 8px 12px;
+  white-space: nowrap;
+  z-index: 1001;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
+
+.tooltip-title {
+  color: #d1d4dc;
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.tooltip-shortcut {
+  color: #808080;
+  font-size: 11px;
+  font-family: monospace;
+}
+
+/* Separator */
+.toolbar-separator {
+  height: 1px;
+  background: #2b2f3a;
+  margin: 10px 15px;
+}
+
+/* Footer */
+.toolbar-footer {
+  border-top: 1px solid #2b2f3a;
+  padding: 10px 0;
+}
+
+/* Scrollbar styling */
+.chart-toolbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chart-toolbar::-webkit-scrollbar-track {
+  background: #1e222d;
+}
+
+.chart-toolbar::-webkit-scrollbar-thumb {
+  background: #2b2f3a;
+  border-radius: 3px;
+}
+
+.chart-toolbar::-webkit-scrollbar-thumb:hover {
+  background: #363a45;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .chart-toolbar {
+    width: 50px;
+  }
+
+  .toolbar-label {
+    display: none;
+  }
+}
