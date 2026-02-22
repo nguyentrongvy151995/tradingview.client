@@ -50,8 +50,6 @@ export async function fetchCoinAnalysis(
   interval: string = '1h',
 ): Promise<Candle[]> {
   try {
-    console.log(`🔄 Fetching ${symbol} data (${interval}) from backend...`);
-
     const url = `${API_BASE_URL}/coin-analysis`;
     const response = await fetch(url);
 

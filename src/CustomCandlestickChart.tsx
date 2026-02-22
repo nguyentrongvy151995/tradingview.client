@@ -37,14 +37,29 @@ function CustomCandlestickChart({
   const [timeframe, setTimeframe] = useState<Timeframe>('1h');
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Popup state
+  const [popupData, setPopupData] = useState<any>(null);
+  const [popupPosition, setPopupPosition] = useState<{x: number, y: number} | null>(null);
+  const [showPopup, setShowPopup] = useState(false);
+  
+  // Drag selection state
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStartTime, setDragStartTime] = useState<Time | null>(null);
+  const [dragEndTime, setDragEndTime] = useState<Time | null>(null);
+  const [selectedRangeData, setSelectedRangeData] = useState<any>(null);
+  const [showRangePopup, setShowRangePopup] = useState(false);
 
   useEffect(() => {
-    if (!chartContainerRef.current || !macdContainerRef.current) return;
+    if (
+      !chartContainerRef.current
+      // || !macdContainerRef.current
+    ) return;
 
     // Create main chart with dark theme (like real trading platforms)
     const chart = createChart(chartContainerRef.current, {
       width: chartContainerRef.current.clientWidth,
-      height: 400,
+      height: 600,
       layout: {
         background: { color: '#1e222d' },
         textColor: '#d1d4dc',
@@ -80,75 +95,75 @@ function CustomCandlestickChart({
     });
 
     // Create MACD chart
-    const macdChart = createChart(macdContainerRef.current, {
-      width: macdContainerRef.current.clientWidth,
-      height: 200,
-      layout: {
-        background: { color: '#1e222d' },
-        textColor: '#d1d4dc',
-      },
-      grid: {
-        vertLines: { color: '#2b2f3a' },
-        horzLines: { color: '#2b2f3a' },
-      },
-      crosshair: {
-        mode: 1,
-      },
-      timeScale: {
-        borderColor: '#2b2f3a',
-        timeVisible: true,
-        secondsVisible: false,
-        visible: false, // Hide time scale on MACD chart
-      },
-      rightPriceScale: {
-        borderColor: '#2b2f3a',
-      },
-    });
+    // const macdChart = createChart(macdContainerRef.current, {
+    //   width: macdContainerRef.current.clientWidth,
+    //   height: 200,
+    //   layout: {
+    //     background: { color: '#1e222d' },
+    //     textColor: '#d1d4dc',
+    //   },
+    //   grid: {
+    //     vertLines: { color: '#2b2f3a' },
+    //     horzLines: { color: '#2b2f3a' },
+    //   },
+    //   crosshair: {
+    //     mode: 1,
+    //   },
+    //   timeScale: {
+    //     borderColor: '#2b2f3a',
+    //     timeVisible: true,
+    //     secondsVisible: false,
+    //     visible: false, // Hide time scale on MACD chart
+    //   },
+    //   rightPriceScale: {
+    //     borderColor: '#2b2f3a',
+    //   },
+    // });
 
     // Add MACD series
-    const macdLineSeries = macdChart.addSeries(LineSeries, {
-      color: '#2962ff',
-      lineWidth: 2,
-      title: 'MACD',
-      priceFormat: {
-        type: 'price',
-        precision: 4,
-        minMove: 0.0001,
-      },
-    });
+    // const macdLineSeries = macdChart.addSeries(LineSeries, {
+    //   color: '#2962ff',
+    //   lineWidth: 2,
+    //   title: 'MACD',
+    //   priceFormat: {
+    //     type: 'price',
+    //     precision: 4,
+    //     minMove: 0.0001,
+    //   },
+    // });
 
-    const signalLineSeries = macdChart.addSeries(LineSeries, {
-      color: '#ff6d00',
-      lineWidth: 2,
-      title: 'Signal',
-      priceFormat: {
-        type: 'price',
-        precision: 4,
-        minMove: 0.0001,
-      },
-    });
+    // const signalLineSeries = macdChart.addSeries(LineSeries, {
+    //   color: '#ff6d00',
+    //   lineWidth: 2,
+    //   title: 'Signal',
+    //   priceFormat: {
+    //     type: 'price',
+    //     precision: 4,
+    //     minMove: 0.0001,
+    //   },
+    // });
 
-    const histogramSeries = macdChart.addSeries(HistogramSeries, {
-      color: '#26a69a',
-      priceFormat: {
-        type: 'price',
-        precision: 4,
-        minMove: 0.0001,
-      },
-    });
+    // const histogramSeries = macdChart.addSeries(HistogramSeries, {
+    //   color: '#26a69a',
+    //   priceFormat: {
+    //     type: 'price',
+    //     precision: 4,
+    //     minMove: 0.0001,
+    //   },
+    // });
 
     // Sync time scales
-    chart.timeScale().subscribeVisibleLogicalRangeChange((timeRange) => {
-      if (timeRange) {
-        macdChart.timeScale().setVisibleLogicalRange(timeRange);
-      }
-    });
+    // chart.timeScale().subscribeVisibleLogicalRangeChange((timeRange) => {
+    //   if (timeRange) {
+    //     macdChart.timeScale().setVisibleLogicalRange(timeRange);
+    //   }
+    // });
 
-    macdChart.timeScale().subscribeVisibleLogicalRangeChange((timeRange) => {
-      if (timeRange) {
-        chart.timeScale().setVisibleLogicalRange(timeRange);
-      }
-    });
+    // macdChart.timeScale().subscribeVisibleLogicalRangeChange((timeRange) => {
+    //   if (timeRange) {
+    //     chart.timeScale().setVisibleLogicalRange(timeRange);
+    //   }
+    // });
 
     // Fetch and load data
     const loadData = async () => {
@@ -188,30 +203,30 @@ function CustomCandlestickChart({
         const macdData = calculateMACD(closePrices, times);
 
         // Set MACD line data (filter out nulls)
-        const macdLineData = macdData
-          .filter((d) => d.macd !== null)
-          .map((d) => ({ time: d.time as Time, value: d.macd as number }));
-        macdLineSeries.setData(macdLineData);
+        // const macdLineData = macdData
+        //   .filter((d) => d.macd !== null)
+        //   .map((d) => ({ time: d.time as Time, value: d.macd as number }));
+        // macdLineSeries.setData(macdLineData);
 
         // Set Signal line data (filter out nulls)
-        const signalLineData = macdData
-          .filter((d) => d.signal !== null)
-          .map((d) => ({ time: d.time as Time, value: d.signal as number }));
-        signalLineSeries.setData(signalLineData);
+        // const signalLineData = macdData
+        //   .filter((d) => d.signal !== null)
+        //   .map((d) => ({ time: d.time as Time, value: d.signal as number }));
+        // signalLineSeries.setData(signalLineData);
 
         // Set Histogram data (filter out nulls and color based on positive/negative)
-        const histogramData = macdData
-          .filter((d) => d.histogram !== null)
-          .map((d) => ({
-            time: d.time as Time,
-            value: d.histogram as number,
-            color: (d.histogram as number) >= 0 ? '#26a69a' : '#ef5350',
-          }));
-        histogramSeries.setData(histogramData);
+        // const histogramData = macdData
+        //   .filter((d) => d.histogram !== null)
+        //   .map((d) => ({
+        //     time: d.time as Time,
+        //     value: d.histogram as number,
+        //     color: (d.histogram as number) >= 0 ? '#26a69a' : '#ef5350',
+        //   }));
+        // histogramSeries.setData(histogramData);
 
-        console.log(
-          `✅ MACD calculated with ${macdLineData.length} data points`,
-        );
+        // console.log(
+        //   `✅ MACD calculated with ${macdLineData.length} data points`,
+        // );
 
         setLoading(false);
       } catch (err) {
@@ -228,52 +243,156 @@ function CustomCandlestickChart({
         const times = fallbackData.map((c) => c.time as string | number);
         const macdData = calculateMACD(closePrices, times);
 
-        const macdLineData = macdData
-          .filter((d) => d.macd !== null)
-          .map((d) => ({ time: d.time as Time, value: d.macd as number }));
-        macdLineSeries.setData(macdLineData);
+        // const macdLineData = macdData
+        //   .filter((d) => d.macd !== null)
+        //   .map((d) => ({ time: d.time as Time, value: d.macd as number }));
+        // macdLineSeries.setData(macdLineData);
 
-        const signalLineData = macdData
-          .filter((d) => d.signal !== null)
-          .map((d) => ({ time: d.time as Time, value: d.signal as number }));
-        signalLineSeries.setData(signalLineData);
+        // const signalLineData = macdData
+        //   .filter((d) => d.signal !== null)
+        //   .map((d) => ({ time: d.time as Time, value: d.signal as number }));
+        // signalLineSeries.setData(signalLineData);
 
-        const histogramData = macdData
-          .filter((d) => d.histogram !== null)
-          .map((d) => ({
-            time: d.time as Time,
-            value: d.histogram as number,
-            color: (d.histogram as number) >= 0 ? '#26a69a' : '#ef5350',
-          }));
-        histogramSeries.setData(histogramData);
+        // const histogramData = macdData
+        //   .filter((d) => d.histogram !== null)
+        //   .map((d) => ({
+        //     time: d.time as Time,
+        //     value: d.histogram as number,
+        //     color: (d.histogram as number) >= 0 ? '#26a69a' : '#ef5350',
+        //   }));
+        // histogramSeries.setData(histogramData);
       }
     };
 
     loadData();
 
     chartRef.current = chart;
-    macdChartRef.current = macdChart;
+    // macdChartRef.current = macdChart;
     candlestickSeriesRef.current = candlestickSeries;
 
     // Subscribe to crosshair move to detect hover
     chart.subscribeCrosshairMove((param) => {
-      if (
-        param.time &&
-        param.seriesData.has(candlestickSeries) &&
-        param.point
-      ) {
-        const data = param.seriesData.get(candlestickSeries);
-        if (data) {
-          console.log('🕯️ Candle Data:', {
-            time: param.time,
-            open: (data as any).open,
-            high: (data as any).high,
-            low: (data as any).low,
-            close: (data as any).close,
-          });
+      // Only show single candle popup if not dragging
+      if (!isDragging) {
+        if (
+          param.time &&
+          param.seriesData.has(candlestickSeries) &&
+          param.point
+        ) {
+          const data = param.seriesData.get(candlestickSeries);
+          if (data) {
+            const candleData = {
+              time: param.time,
+              open: (data as any).open,
+              high: (data as any).high,
+              low: (data as any).low,
+              close: (data as any).close,
+            };
+            
+            // Set popup data and position
+            setPopupData(candleData);
+            setPopupPosition({
+              x: param.point.x,
+              y: param.point.y
+            });
+            setShowPopup(true);
+            
+            console.log('🕯️ Candle Data:', candleData);
+          } else {
+            // Hide popup when hover but no candle data
+            setShowPopup(false);
+          }
+        } else {
+          // Hide popup when not hovering over chart or no crosshair
+          setShowPopup(false);
         }
       }
     });
+
+    // Function to calculate range data from multiple candles
+    const calculateRangeData = (startTime: Time, endTime: Time) => {
+      const data = candlestickSeries.data();
+      if (!data || data.length === 0) return;
+
+      // Ensure start is before end
+      const start = startTime < endTime ? startTime : endTime;
+      const end = startTime < endTime ? endTime : startTime;
+
+      // Filter candles in range
+      const rangeCandles = data.filter((candle: any) => 
+        candle.time >= start && candle.time <= end
+      );
+
+      if (rangeCandles.length > 0) {
+        const opens = rangeCandles.map((c: any) => c.open);
+        const highs = rangeCandles.map((c: any) => c.high);
+        const lows = rangeCandles.map((c: any) => c.low);
+        const closes = rangeCandles.map((c: any) => c.close);
+
+        const firstCandle = rangeCandles[0] as any;
+        const lastCandle = rangeCandles[rangeCandles.length - 1] as any;
+
+        const rangeData = {
+          startTime: start,
+          endTime: end,
+          count: rangeCandles.length,
+          firstOpen: firstCandle.open,
+          lastClose: lastCandle.close,
+          highestHigh: Math.max(...highs),
+          lowestLow: Math.min(...lows),
+          change: lastCandle.close - firstCandle.open,
+          changePercent: ((lastCandle.close - firstCandle.open) / firstCandle.open) * 100,
+        };
+
+        setSelectedRangeData(rangeData);
+        setShowRangePopup(true);
+        console.log('📊 Range Data:', rangeData);
+      }
+    };
+
+    // Add mouse event listeners for drag selection
+    const chartContainer = chartContainerRef.current;
+    
+    const handleMouseDown = (event: MouseEvent) => {
+      const rect = chartContainer.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const time = chart.timeScale().coordinateToTime(x);
+      
+      if (time) {
+        setIsDragging(true);
+        setDragStartTime(time);
+        setDragEndTime(time);
+        setShowPopup(false); // Hide single candle popup when starting drag
+        setShowRangePopup(false);
+      }
+    };
+
+    const handleMouseMove = (event: MouseEvent) => {
+      if (isDragging) {
+        const rect = chartContainer.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const time = chart.timeScale().coordinateToTime(x);
+        
+        if (time) {
+          setDragEndTime(time);
+        }
+      }
+    };
+
+    const handleMouseUp = () => {
+      if (isDragging && dragStartTime && dragEndTime) {
+        // Calculate range data
+        calculateRangeData(dragStartTime, dragEndTime);
+        setIsDragging(false);
+      }
+    };
+
+    chartContainer.addEventListener('mousedown', handleMouseDown);
+    chartContainer.addEventListener('mousemove', handleMouseMove);
+    chartContainer.addEventListener('mouseup', handleMouseUp);
+    
+    // Also listen for mouseup on document in case user drags outside chart
+    document.addEventListener('mouseup', handleMouseUp);
 
     // Handle resize
     const handleResize = () => {
@@ -282,19 +401,23 @@ function CustomCandlestickChart({
           width: chartContainerRef.current.clientWidth,
         });
       }
-      if (macdContainerRef.current && macdChart) {
-        macdChart.applyOptions({
-          width: macdContainerRef.current.clientWidth,
-        });
-      }
+      // if (macdContainerRef.current && macdChart) {
+      //   macdChart.applyOptions({
+      //     width: macdContainerRef.current.clientWidth,
+      //   });
+      // }
     };
 
     window.addEventListener('resize', handleResize);
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      chartContainer.removeEventListener('mousedown', handleMouseDown);
+      chartContainer.removeEventListener('mousemove', handleMouseMove);
+      chartContainer.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('mouseup', handleMouseUp);
       chart.remove();
-      macdChart.remove();
+      // macdChart.remove();
     };
   }, [symbol, timeframe, useRealData]);
 
@@ -378,10 +501,159 @@ function CustomCandlestickChart({
       <div
         ref={chartContainerRef}
         style={{ position: 'relative', width: '100%' }}
-      />
+      >
+        {/* Candle Data Popup */}
+        {showPopup && popupData && popupPosition && (
+          <div
+            style={{
+              position: 'absolute',
+              left: popupPosition.x + 10,
+              top: popupPosition.y - 150,
+              background: 'rgba(30, 34, 45, 0.95)',
+              border: '1px solid #2b2f3a',
+              borderRadius: '8px',
+              padding: '12px',
+              fontSize: '12px',
+              color: '#d1d4dc',
+              backdropFilter: 'blur(4px)',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+              zIndex: 1000,
+              minWidth: '180px',
+              pointerEvents: 'none', // Cho phép hover qua popup
+            }}
+          >
+            <div style={{ marginBottom: '8px', fontWeight: 'bold', color: '#f7931a' }}>
+              🕯️ Candle Data
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div>
+                <span style={{ color: '#808080' }}>Time: </span>
+                <span style={{ color: '#d1d4dc' }}>
+                  {typeof popupData.time === 'string' 
+                    ? popupData.time 
+                    : new Date(popupData.time * 1000).toLocaleString()}
+                </span>
+              </div>
+              <div>
+                <span style={{ color: '#808080' }}>Open: </span>
+                <span style={{ color: '#d1d4dc' }}>${popupData.open?.toFixed(2)}</span>
+              </div>
+              <div>
+                <span style={{ color: '#808080' }}>High: </span>
+                <span style={{ color: '#26a69a' }}>${popupData.high?.toFixed(2)}</span>
+              </div>
+              <div>
+                <span style={{ color: '#808080' }}>Low: </span>
+                <span style={{ color: '#ef5350' }}>${popupData.low?.toFixed(2)}</span>
+              </div>
+              <div>
+                <span style={{ color: '#808080' }}>Close: </span>
+                <span style={{ 
+                  color: popupData.close >= popupData.open ? '#26a69a' : '#ef5350' 
+                }}>${popupData.close?.toFixed(2)}</span>
+              </div>
+              <div style={{ marginTop: '4px', paddingTop: '4px', borderTop: '1px solid #2b2f3a' }}>
+                <span style={{ color: '#808080' }}>Change: </span>
+                <span style={{ 
+                  color: popupData.close >= popupData.open ? '#26a69a' : '#ef5350' 
+                }}>
+                  {popupData.close >= popupData.open ? '+' : ''}
+                  {((popupData.close - popupData.open) / popupData.open * 100).toFixed(2)}%
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Range Data Popup */}
+        {showRangePopup && selectedRangeData && (
+          <div
+            style={{
+              position: 'absolute',
+              left: '50%',
+              top: '50%',
+              transform: 'translate(-50%, -50%)',
+              background: 'rgba(30, 34, 45, 0.95)',
+              border: '1px solid #2b2f3a',
+              borderRadius: '12px',
+              padding: '16px',
+              fontSize: '13px',
+              color: '#d1d4dc',
+              backdropFilter: 'blur(8px)',
+              boxShadow: '0 8px 24px rgba(0, 0, 0, 0.4)',
+              zIndex: 1001,
+              minWidth: '280px',
+              pointerEvents: 'auto',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <div style={{ fontWeight: 'bold', color: '#f7931a', fontSize: '14px' }}>
+                📊 Range Analysis
+              </div>
+              <button
+                onClick={() => setShowRangePopup(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#808080',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  padding: '0',
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+              <div>
+                <span style={{ color: '#808080' }}>Period: </span>
+                <span style={{ color: '#d1d4dc', fontWeight: 'bold' }}>
+                  {selectedRangeData.count} candles
+                </span>
+              </div>
+              <div>
+                <span style={{ color: '#808080' }}>Change: </span>
+                <span style={{ 
+                  color: selectedRangeData.change >= 0 ? '#26a69a' : '#ef5350',
+                  fontWeight: 'bold'
+                }}>
+                  {selectedRangeData.change >= 0 ? '+' : ''}
+                  {selectedRangeData.changePercent.toFixed(2)}%
+                </span>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: '#808080' }}>First Open:</span>
+                <span style={{ color: '#d1d4dc' }}>${selectedRangeData.firstOpen?.toFixed(2)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: '#808080' }}>Last Close:</span>
+                <span style={{ 
+                  color: selectedRangeData.lastClose >= selectedRangeData.firstOpen ? '#26a69a' : '#ef5350' 
+                }}>${selectedRangeData.lastClose?.toFixed(2)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: '#808080' }}>Highest High:</span>
+                <span style={{ color: '#26a69a' }}>${selectedRangeData.highestHigh?.toFixed(2)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: '#808080' }}>Lowest Low:</span>
+                <span style={{ color: '#ef5350' }}>${selectedRangeData.lowestLow?.toFixed(2)}</span>
+              </div>
+            </div>
+
+            <div style={{ marginTop: '12px', paddingTop: '8px', borderTop: '1px solid #2b2f3a', fontSize: '12px', color: '#808080' }}>
+              💡 Price movement: ${selectedRangeData.firstOpen?.toFixed(2)} → ${selectedRangeData.lastClose?.toFixed(2)}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* MACD Indicator Container */}
-      <div
+      {/* <div
         style={{
           marginTop: '10px',
           padding: '10px',
@@ -404,7 +676,7 @@ function CustomCandlestickChart({
           ref={macdContainerRef}
           style={{ position: 'relative', width: '100%' }}
         />
-      </div>
+      </div> */}
 
       <div
         style={{
@@ -421,8 +693,7 @@ function CustomCandlestickChart({
           {timeframe.toUpperCase()})
         </div>
         <div style={{ fontSize: '12px', color: '#808080' }}>
-          💡 Hover vào chart để xem chi tiết nến trong console |{' '}
-          {useRealData ? '🔴 Backend API' : '🟡 Mock Data'}
+          💡 Hover để xem nến | 🖱️ Kéo thả để chọn range | {useRealData ? '🔴 Backend API' : '🟡 Mock Data'}
         </div>
       </div>
     </div>
