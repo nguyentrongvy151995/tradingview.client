@@ -37,26 +37,102 @@ function CustomCandlestickChart({
   const [timeframe, setTimeframe] = useState<Timeframe>('1h');
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Popup state
   const [popupData, setPopupData] = useState<any>(null);
-  const [popupPosition, setPopupPosition] = useState<{x: number, y: number} | null>(null);
+  const [popupPosition, setPopupPosition] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
   const [showPopup, setShowPopup] = useState(false);
-  
-  // Drag selection state
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStartTime, setDragStartTime] = useState<Time | null>(null);
-  const [dragEndTime, setDragEndTime] = useState<Time | null>(null);
+
+  // Double click selection state
+  const [isSelectingRange, setIsSelectingRange] = useState(false);
+  const [firstClickTime, setFirstClickTime] = useState<Time | null>(null);
   const [selectedRangeData, setSelectedRangeData] = useState<any>(null);
   const [showRangePopup, setShowRangePopup] = useState(false);
 
-  useEffect(() => {
-    if (
-      !chartContainerRef.current
-      // || !macdContainerRef.current
-    ) return;
+  // Refs to avoid stale closure
+  const isSelectingRangeRef = useRef(false);
+  const firstClickTimeRef = useRef<Time | null>(null);
 
-    // Create main chart with dark theme (like real trading platforms)
+  // Handle double click event - moved outside useEffect
+  const handleDoubleClick = (event: MouseEvent, chart: IChartApi, chartContainer: HTMLDivElement) => {
+    const rect = chartContainer.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const time = chart.timeScale().coordinateToTime(x);
+
+    if (time) {
+      if (!isSelectingRangeRef.current) {
+        // First double click - start selection
+        console.log('🖱️ First double click at time:', time);
+        isSelectingRangeRef.current = true;
+        firstClickTimeRef.current = time;
+        setIsSelectingRange(true);
+        setFirstClickTime(time);
+        setShowPopup(false);
+        setShowRangePopup(false);
+      } else {
+        // Second double click - complete selection
+        console.log('🖱️ Second double click at time:', time, 'First was:', firstClickTimeRef.current);
+        // Show popup with test message
+        setSelectedRangeData({
+          message: 'test',
+          startTime: firstClickTimeRef.current,
+          endTime: time,
+        });
+        setShowRangePopup(true);
+        setShowPopup(false);
+
+        // Reset selection state
+        isSelectingRangeRef.current = false;
+        firstClickTimeRef.current = null;
+        setIsSelectingRange(false);
+        setFirstClickTime(null);
+      }
+    }
+  };
+
+  // Handle crosshair move event - moved outside useEffect
+  const handleCrosshairMove = (param: any, candlestickSeries: any) => {
+    // Only show single candle popup if not selecting range
+    if (!isSelectingRangeRef.current) {
+      if (
+        param.time &&
+        param.seriesData.has(candlestickSeries) &&
+        param.point
+      ) {
+        const data = param.seriesData.get(candlestickSeries);
+        if (data) {
+          const candleData = {
+            time: param.time,
+            open: (data as any).open,
+            high: (data as any).high,
+            low: (data as any).low,
+            close: (data as any).close,
+          };
+
+          // Set popup data and position
+          setPopupData(candleData);
+          setPopupPosition({
+            x: param.point.x,
+            y: param.point.y,
+          });
+          setShowPopup(true);
+        } else {
+          // Hide popup when hover but no candle data
+          setShowPopup(false);
+        }
+      } else {
+        // Hide popup when not hovering over chart or no crosshair
+        setShowPopup(false);
+      }
+    }
+  };
+
+  const initChart = () => {
+    if (!chartContainerRef.current) return;
+
     const chart = createChart(chartContainerRef.current, {
       width: chartContainerRef.current.clientWidth,
       height: 600,
@@ -81,6 +157,12 @@ function CustomCandlestickChart({
       },
     });
 
+    return chart;
+  };
+
+  const addStyles = (chart: any) => {
+    if (!chart) return;
+
     const candlestickSeries = chart.addSeries(CandlestickSeries, {
       upColor: '#26a69a', // Green for bullish
       downColor: '#ef5350', // Red for bearish
@@ -93,6 +175,159 @@ function CustomCandlestickChart({
         minMove: 0.01,
       },
     });
+
+    return candlestickSeries;
+  };
+
+  // Fetch and load data
+  const loadData = async (candlestickSeries: any) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      let candleData: CandleData[];
+
+      if (useRealData) {
+        // Fetch real data from your backend API
+        console.log(`🔄 Fetching ${symbol} data (${timeframe})...`);
+        const apiData = await fetchCoinAnalysis(symbol, timeframe);
+        candleData = apiData.map((candle: Candle) => ({
+          time: (typeof candle.time === 'string'
+            ? candle.time
+            : candle.time) as Time,
+          open: candle.open,
+          high: candle.high,
+          low: candle.low,
+          close: candle.close,
+        }));
+        console.log(`✅ Loaded ${candleData.length} candles from backend API`);
+      } else {
+        // Use mock data
+        candleData = generateSampleData(timeframe);
+        console.log(`✅ Generated ${candleData.length} mock candles`);
+      }
+
+      candlestickSeries.setData(candleData);
+
+      // Calculate and display MACD
+      // const closePrices = candleData.map((c) => c.close);
+      // const times = candleData.map((c) => c.time as string | number);
+      // const macdData = calculateMACD(closePrices, times);
+
+      // Set MACD line data (filter out nulls)
+      // const macdLineData = macdData
+      //   .filter((d) => d.macd !== null)
+      //   .map((d) => ({ time: d.time as Time, value: d.macd as number }));
+      // macdLineSeries.setData(macdLineData);
+
+      // Set Signal line data (filter out nulls)
+      // const signalLineData = macdData
+      //   .filter((d) => d.signal !== null)
+      //   .map((d) => ({ time: d.time as Time, value: d.signal as number }));
+      // signalLineSeries.setData(signalLineData);
+
+      // Set Histogram data (filter out nulls and color based on positive/negative)
+      // const histogramData = macdData
+      //   .filter((d) => d.histogram !== null)
+      //   .map((d) => ({
+      //     time: d.time as Time,
+      //     value: d.histogram as number,
+      //     color: (d.histogram as number) >= 0 ? '#26a69a' : '#ef5350',
+      //   }));
+      // histogramSeries.setData(histogramData);
+
+      // console.log(
+      //   `✅ MACD calculated with ${macdLineData.length} data points`,
+      // );
+
+      setLoading(false);
+    } catch (err) {
+      console.error('❌ Error loading data:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load data');
+      setLoading(false);
+
+      // Fallback to mock data on error
+      const fallbackData = generateSampleData(timeframe);
+      candlestickSeries.setData(fallbackData);
+
+      // Calculate MACD for fallback data too
+      // const closePrices = fallbackData.map((c) => c.close);
+      // const times = fallbackData.map((c) => c.time as string | number);
+      // const macdData = calculateMACD(closePrices, times);
+
+      // const macdLineData = macdData
+      //   .filter((d) => d.macd !== null)
+      //   .map((d) => ({ time: d.time as Time, value: d.macd as number }));
+      // macdLineSeries.setData(macdLineData);
+
+      // const signalLineData = macdData
+      //   .filter((d) => d.signal !== null)
+      //   .map((d) => ({ time: d.time as Time, value: d.signal as number }));
+      // signalLineSeries.setData(signalLineData);
+
+      // const histogramData = macdData
+      //   .filter((d) => d.histogram !== null)
+      //   .map((d) => ({
+      //     time: d.time as Time,
+      //     value: d.histogram as number,
+      //     color: (d.histogram as number) >= 0 ? '#26a69a' : '#ef5350',
+      //   }));
+      // histogramSeries.setData(histogramData);
+    }
+  };
+
+  useEffect(() => {
+    if (
+      !chartContainerRef.current
+      // || !macdContainerRef.current
+    )
+      return;
+
+    // Create main chart with dark theme (like real trading platforms)
+    // const chart = createChart(chartContainerRef.current, {
+    //   width: chartContainerRef.current.clientWidth,
+    //   height: 600,
+    //   layout: {
+    //     background: { color: '#1e222d' },
+    //     textColor: '#d1d4dc',
+    //   },
+    //   grid: {
+    //     vertLines: { color: '#2b2f3a' },
+    //     horzLines: { color: '#2b2f3a' },
+    //   },
+    //   crosshair: {
+    //     mode: 1,
+    //   },
+    //   timeScale: {
+    //     borderColor: '#2b2f3a',
+    //     timeVisible: true,
+    //     secondsVisible: false,
+    //   },
+    //   rightPriceScale: {
+    //     borderColor: '#2b2f3a',
+    //   },
+    // });
+
+    const chart = initChart();
+
+    if (!chart) return;
+
+    // const candlestickSeries = chart.addSeries(CandlestickSeries, {
+    //   upColor: '#26a69a', // Green for bullish
+    //   downColor: '#ef5350', // Red for bearish
+    //   borderVisible: false,
+    //   wickUpColor: '#26a69a',
+    //   wickDownColor: '#ef5350',
+    //   priceFormat: {
+    //     type: 'price',
+    //     precision: 2,
+    //     minMove: 0.01,
+    //   },
+    // });
+
+    const candlestickSeries = addStyles(chart);
+
+    if (!candlestickSeries) return;
 
     // Create MACD chart
     // const macdChart = createChart(macdContainerRef.current, {
@@ -165,234 +400,68 @@ function CustomCandlestickChart({
     //   }
     // });
 
-    // Fetch and load data
-    const loadData = async () => {
-      setLoading(true);
-      setError(null);
-
-      try {
-        let candleData: CandleData[];
-
-        if (useRealData) {
-          // Fetch real data from your backend API
-          console.log(`🔄 Fetching ${symbol} data (${timeframe})...`);
-          const apiData = await fetchCoinAnalysis(symbol, timeframe);
-          candleData = apiData.map((candle: Candle) => ({
-            time: (typeof candle.time === 'string'
-              ? candle.time
-              : candle.time) as Time,
-            open: candle.open,
-            high: candle.high,
-            low: candle.low,
-            close: candle.close,
-          }));
-          console.log(
-            `✅ Loaded ${candleData.length} candles from backend API`,
-          );
-        } else {
-          // Use mock data
-          candleData = generateSampleData(timeframe);
-          console.log(`✅ Generated ${candleData.length} mock candles`);
-        }
-
-        candlestickSeries.setData(candleData);
-
-        // Calculate and display MACD
-        const closePrices = candleData.map((c) => c.close);
-        const times = candleData.map((c) => c.time as string | number);
-        const macdData = calculateMACD(closePrices, times);
-
-        // Set MACD line data (filter out nulls)
-        // const macdLineData = macdData
-        //   .filter((d) => d.macd !== null)
-        //   .map((d) => ({ time: d.time as Time, value: d.macd as number }));
-        // macdLineSeries.setData(macdLineData);
-
-        // Set Signal line data (filter out nulls)
-        // const signalLineData = macdData
-        //   .filter((d) => d.signal !== null)
-        //   .map((d) => ({ time: d.time as Time, value: d.signal as number }));
-        // signalLineSeries.setData(signalLineData);
-
-        // Set Histogram data (filter out nulls and color based on positive/negative)
-        // const histogramData = macdData
-        //   .filter((d) => d.histogram !== null)
-        //   .map((d) => ({
-        //     time: d.time as Time,
-        //     value: d.histogram as number,
-        //     color: (d.histogram as number) >= 0 ? '#26a69a' : '#ef5350',
-        //   }));
-        // histogramSeries.setData(histogramData);
-
-        // console.log(
-        //   `✅ MACD calculated with ${macdLineData.length} data points`,
-        // );
-
-        setLoading(false);
-      } catch (err) {
-        console.error('❌ Error loading data:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load data');
-        setLoading(false);
-
-        // Fallback to mock data on error
-        const fallbackData = generateSampleData(timeframe);
-        candlestickSeries.setData(fallbackData);
-
-        // Calculate MACD for fallback data too
-        const closePrices = fallbackData.map((c) => c.close);
-        const times = fallbackData.map((c) => c.time as string | number);
-        const macdData = calculateMACD(closePrices, times);
-
-        // const macdLineData = macdData
-        //   .filter((d) => d.macd !== null)
-        //   .map((d) => ({ time: d.time as Time, value: d.macd as number }));
-        // macdLineSeries.setData(macdLineData);
-
-        // const signalLineData = macdData
-        //   .filter((d) => d.signal !== null)
-        //   .map((d) => ({ time: d.time as Time, value: d.signal as number }));
-        // signalLineSeries.setData(signalLineData);
-
-        // const histogramData = macdData
-        //   .filter((d) => d.histogram !== null)
-        //   .map((d) => ({
-        //     time: d.time as Time,
-        //     value: d.histogram as number,
-        //     color: (d.histogram as number) >= 0 ? '#26a69a' : '#ef5350',
-        //   }));
-        // histogramSeries.setData(histogramData);
-      }
-    };
-
-    loadData();
+    loadData(candlestickSeries);
 
     chartRef.current = chart;
     // macdChartRef.current = macdChart;
     candlestickSeriesRef.current = candlestickSeries;
 
-    // Subscribe to crosshair move to detect hover
-    chart.subscribeCrosshairMove((param) => {
-      // Only show single candle popup if not dragging
-      if (!isDragging) {
-        if (
-          param.time &&
-          param.seriesData.has(candlestickSeries) &&
-          param.point
-        ) {
-          const data = param.seriesData.get(candlestickSeries);
-          if (data) {
-            const candleData = {
-              time: param.time,
-              open: (data as any).open,
-              high: (data as any).high,
-              low: (data as any).low,
-              close: (data as any).close,
-            };
-            
-            // Set popup data and position
-            setPopupData(candleData);
-            setPopupPosition({
-              x: param.point.x,
-              y: param.point.y
-            });
-            setShowPopup(true);
-            
-            console.log('🕯️ Candle Data:', candleData);
-          } else {
-            // Hide popup when hover but no candle data
-            setShowPopup(false);
-          }
-        } else {
-          // Hide popup when not hovering over chart or no crosshair
-          setShowPopup(false);
-        }
-      }
-    });
+    // Subscribe to crosshair move using wrapper function
+    const crosshairMoveWrapper = (param: any) => {
+      handleCrosshairMove(param, candlestickSeries);
+    };
+    
+    chart.subscribeCrosshairMove(crosshairMoveWrapper);
 
     // Function to calculate range data from multiple candles
-    const calculateRangeData = (startTime: Time, endTime: Time) => {
-      const data = candlestickSeries.data();
-      if (!data || data.length === 0) return;
+    // const calculateRangeData = (startTime: Time, endTime: Time) => {
+    //   const data = candlestickSeries.data();
+    //   if (!data || data.length === 0) return;
 
-      // Ensure start is before end
-      const start = startTime < endTime ? startTime : endTime;
-      const end = startTime < endTime ? endTime : startTime;
+    //   // Ensure start is before end
+    //   const start = startTime < endTime ? startTime : endTime;
+    //   const end = startTime < endTime ? endTime : startTime;
 
-      // Filter candles in range
-      const rangeCandles = data.filter((candle: any) => 
-        candle.time >= start && candle.time <= end
-      );
+    //   // Filter candles in range
+    //   const rangeCandles = data.filter((candle: any) =>
+    //     candle.time >= start && candle.time <= end
+    //   );
 
-      if (rangeCandles.length > 0) {
-        const opens = rangeCandles.map((c: any) => c.open);
-        const highs = rangeCandles.map((c: any) => c.high);
-        const lows = rangeCandles.map((c: any) => c.low);
-        const closes = rangeCandles.map((c: any) => c.close);
+    //   if (rangeCandles.length > 0) {
+    //     const opens = rangeCandles.map((c: any) => c.open);
+    //     const highs = rangeCandles.map((c: any) => c.high);
+    //     const lows = rangeCandles.map((c: any) => c.low);
+    //     const closes = rangeCandles.map((c: any) => c.close);
 
-        const firstCandle = rangeCandles[0] as any;
-        const lastCandle = rangeCandles[rangeCandles.length - 1] as any;
+    //     const firstCandle = rangeCandles[0] as any;
+    //     const lastCandle = rangeCandles[rangeCandles.length - 1] as any;
 
-        const rangeData = {
-          startTime: start,
-          endTime: end,
-          count: rangeCandles.length,
-          firstOpen: firstCandle.open,
-          lastClose: lastCandle.close,
-          highestHigh: Math.max(...highs),
-          lowestLow: Math.min(...lows),
-          change: lastCandle.close - firstCandle.open,
-          changePercent: ((lastCandle.close - firstCandle.open) / firstCandle.open) * 100,
-        };
+    //     const rangeData = {
+    //       startTime: start,
+    //       endTime: end,
+    //       count: rangeCandles.length,
+    //       firstOpen: firstCandle.open,
+    //       lastClose: lastCandle.close,
+    //       highestHigh: Math.max(...highs),
+    //       lowestLow: Math.min(...lows),
+    //       change: lastCandle.close - firstCandle.open,
+    //       changePercent: ((lastCandle.close - firstCandle.open) / firstCandle.open) * 100,
+    //     };
 
-        setSelectedRangeData(rangeData);
-        setShowRangePopup(true);
-        console.log('📊 Range Data:', rangeData);
-      }
-    };
+    //     setSelectedRangeData(rangeData);
+    //     setShowRangePopup(true);
+    //   }
+    // };
 
-    // Add mouse event listeners for drag selection
+    // Add mouse event listeners for click selection
     const chartContainer = chartContainerRef.current;
-    
-    const handleMouseDown = (event: MouseEvent) => {
-      const rect = chartContainer.getBoundingClientRect();
-      const x = event.clientX - rect.left;
-      const time = chart.timeScale().coordinateToTime(x);
-      
-      if (time) {
-        setIsDragging(true);
-        setDragStartTime(time);
-        setDragEndTime(time);
-        setShowPopup(false); // Hide single candle popup when starting drag
-        setShowRangePopup(false);
-      }
+
+    // Create wrapper function to pass chart and container to handleDoubleClick
+    const doubleClickWrapper = (event: MouseEvent) => {
+      handleDoubleClick(event, chart, chartContainer);
     };
 
-    const handleMouseMove = (event: MouseEvent) => {
-      if (isDragging) {
-        const rect = chartContainer.getBoundingClientRect();
-        const x = event.clientX - rect.left;
-        const time = chart.timeScale().coordinateToTime(x);
-        
-        if (time) {
-          setDragEndTime(time);
-        }
-      }
-    };
-
-    const handleMouseUp = () => {
-      if (isDragging && dragStartTime && dragEndTime) {
-        // Calculate range data
-        calculateRangeData(dragStartTime, dragEndTime);
-        setIsDragging(false);
-      }
-    };
-
-    chartContainer.addEventListener('mousedown', handleMouseDown);
-    chartContainer.addEventListener('mousemove', handleMouseMove);
-    chartContainer.addEventListener('mouseup', handleMouseUp);
-    
-    // Also listen for mouseup on document in case user drags outside chart
-    document.addEventListener('mouseup', handleMouseUp);
+    chartContainer.addEventListener('dblclick', doubleClickWrapper);
 
     // Handle resize
     const handleResize = () => {
@@ -412,14 +481,44 @@ function CustomCandlestickChart({
 
     return () => {
       window.removeEventListener('resize', handleResize);
-      chartContainer.removeEventListener('mousedown', handleMouseDown);
-      chartContainer.removeEventListener('mousemove', handleMouseMove);
-      chartContainer.removeEventListener('mouseup', handleMouseUp);
-      document.removeEventListener('mouseup', handleMouseUp);
+      chartContainer.removeEventListener('dblclick', doubleClickWrapper);
       chart.remove();
       // macdChart.remove();
     };
   }, [symbol, timeframe, useRealData]);
+
+  // const handleDoubleClick = (event: MouseEvent, chartContainer: any, chart: any) => {
+  //   const rect = chartContainer.getBoundingClientRect();
+  //   const x = event.clientX - rect.left;
+  //   const time = chart.timeScale().coordinateToTime(x);
+
+  //   if (time) {
+  //     if (!isSelectingRangeRef.current) {
+  //       // First double click - start selection
+  //       isSelectingRangeRef.current = true;
+  //       firstClickTimeRef.current = time;
+  //       setIsSelectingRange(true);
+  //       setFirstClickTime(time);
+  //       setShowPopup(false);
+  //       setShowRangePopup(false);
+  //     } else {
+  //       // Show popup with test message
+  //       setSelectedRangeData({
+  //         message: 'test',
+  //         startTime: firstClickTimeRef.current,
+  //         endTime: time,
+  //       });
+  //       setShowRangePopup(true);
+  //       setShowPopup(false);
+
+  //       // Reset selection state
+  //       isSelectingRangeRef.current = false;
+  //       firstClickTimeRef.current = null;
+  //       setIsSelectingRange(false);
+  //       setFirstClickTime(null);
+  //     }
+  //   }
+  // };
 
   return (
     <div>
@@ -522,50 +621,82 @@ function CustomCandlestickChart({
               pointerEvents: 'none', // Cho phép hover qua popup
             }}
           >
-            <div style={{ marginBottom: '8px', fontWeight: 'bold', color: '#f7931a' }}>
+            <div
+              style={{
+                marginBottom: '8px',
+                fontWeight: 'bold',
+                color: '#f7931a',
+              }}
+            >
               🕯️ Candle Data
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <div
+              style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}
+            >
               <div>
                 <span style={{ color: '#808080' }}>Time: </span>
                 <span style={{ color: '#d1d4dc' }}>
-                  {typeof popupData.time === 'string' 
-                    ? popupData.time 
+                  {typeof popupData.time === 'string'
+                    ? popupData.time
                     : new Date(popupData.time * 1000).toLocaleString()}
                 </span>
               </div>
               <div>
                 <span style={{ color: '#808080' }}>Open: </span>
-                <span style={{ color: '#d1d4dc' }}>${popupData.open?.toFixed(2)}</span>
+                <span style={{ color: '#d1d4dc' }}>
+                  ${popupData.open?.toFixed(2)}
+                </span>
               </div>
               <div>
                 <span style={{ color: '#808080' }}>High: </span>
-                <span style={{ color: '#26a69a' }}>${popupData.high?.toFixed(2)}</span>
+                <span style={{ color: '#26a69a' }}>
+                  ${popupData.high?.toFixed(2)}
+                </span>
               </div>
               <div>
                 <span style={{ color: '#808080' }}>Low: </span>
-                <span style={{ color: '#ef5350' }}>${popupData.low?.toFixed(2)}</span>
+                <span style={{ color: '#ef5350' }}>
+                  ${popupData.low?.toFixed(2)}
+                </span>
               </div>
               <div>
                 <span style={{ color: '#808080' }}>Close: </span>
-                <span style={{ 
-                  color: popupData.close >= popupData.open ? '#26a69a' : '#ef5350' 
-                }}>${popupData.close?.toFixed(2)}</span>
+                <span
+                  style={{
+                    color:
+                      popupData.close >= popupData.open ? '#26a69a' : '#ef5350',
+                  }}
+                >
+                  ${popupData.close?.toFixed(2)}
+                </span>
               </div>
-              <div style={{ marginTop: '4px', paddingTop: '4px', borderTop: '1px solid #2b2f3a' }}>
+              <div
+                style={{
+                  marginTop: '4px',
+                  paddingTop: '4px',
+                  borderTop: '1px solid #2b2f3a',
+                }}
+              >
                 <span style={{ color: '#808080' }}>Change: </span>
-                <span style={{ 
-                  color: popupData.close >= popupData.open ? '#26a69a' : '#ef5350' 
-                }}>
+                <span
+                  style={{
+                    color:
+                      popupData.close >= popupData.open ? '#26a69a' : '#ef5350',
+                  }}
+                >
                   {popupData.close >= popupData.open ? '+' : ''}
-                  {((popupData.close - popupData.open) / popupData.open * 100).toFixed(2)}%
+                  {(
+                    ((popupData.close - popupData.open) / popupData.open) *
+                    100
+                  ).toFixed(2)}
+                  %
                 </span>
               </div>
             </div>
           </div>
         )}
 
-        {/* Range Data Popup */}
+        {/* Simple Test Popup */}
         {showRangePopup && selectedRangeData && (
           <div
             style={{
@@ -574,80 +705,61 @@ function CustomCandlestickChart({
               top: '50%',
               transform: 'translate(-50%, -50%)',
               background: 'rgba(30, 34, 45, 0.95)',
-              border: '1px solid #2b2f3a',
+              border: '2px solid #f7931a',
               borderRadius: '12px',
-              padding: '16px',
-              fontSize: '13px',
+              padding: '20px',
+              fontSize: '16px',
               color: '#d1d4dc',
               backdropFilter: 'blur(8px)',
               boxShadow: '0 8px 24px rgba(0, 0, 0, 0.4)',
               zIndex: 1001,
-              minWidth: '280px',
+              minWidth: '200px',
+              textAlign: 'center',
               pointerEvents: 'auto',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-              <div style={{ fontWeight: 'bold', color: '#f7931a', fontSize: '14px' }}>
-                📊 Range Analysis
-              </div>
-              <button
-                onClick={() => setShowRangePopup(false)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#808080',
-                  cursor: 'pointer',
-                  fontSize: '16px',
-                  padding: '0',
-                }}
-              >
-                ✕
-              </button>
+            <div
+              style={{
+                fontSize: '24px',
+                color: '#f7931a',
+                marginBottom: '10px',
+              }}
+            >
+              🎯
             </div>
-            
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
-              <div>
-                <span style={{ color: '#808080' }}>Period: </span>
-                <span style={{ color: '#d1d4dc', fontWeight: 'bold' }}>
-                  {selectedRangeData.count} candles
-                </span>
-              </div>
-              <div>
-                <span style={{ color: '#808080' }}>Change: </span>
-                <span style={{ 
-                  color: selectedRangeData.change >= 0 ? '#26a69a' : '#ef5350',
-                  fontWeight: 'bold'
-                }}>
-                  {selectedRangeData.change >= 0 ? '+' : ''}
-                  {selectedRangeData.changePercent.toFixed(2)}%
-                </span>
-              </div>
+            <div
+              style={{
+                fontSize: '20px',
+                fontWeight: 'bold',
+                color: '#26a69a',
+                marginBottom: '10px',
+              }}
+            >
+              {selectedRangeData.message || 'test'}
             </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#808080' }}>First Open:</span>
-                <span style={{ color: '#d1d4dc' }}>${selectedRangeData.firstOpen?.toFixed(2)}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#808080' }}>Last Close:</span>
-                <span style={{ 
-                  color: selectedRangeData.lastClose >= selectedRangeData.firstOpen ? '#26a69a' : '#ef5350' 
-                }}>${selectedRangeData.lastClose?.toFixed(2)}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#808080' }}>Highest High:</span>
-                <span style={{ color: '#26a69a' }}>${selectedRangeData.highestHigh?.toFixed(2)}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#808080' }}>Lowest Low:</span>
-                <span style={{ color: '#ef5350' }}>${selectedRangeData.lowestLow?.toFixed(2)}</span>
-              </div>
+            <div
+              style={{
+                fontSize: '12px',
+                color: '#808080',
+                marginBottom: '15px',
+              }}
+            >
+              Drag selection thành công!
             </div>
-
-            <div style={{ marginTop: '12px', paddingTop: '8px', borderTop: '1px solid #2b2f3a', fontSize: '12px', color: '#808080' }}>
-              💡 Price movement: ${selectedRangeData.firstOpen?.toFixed(2)} → ${selectedRangeData.lastClose?.toFixed(2)}
-            </div>
+            <button
+              onClick={() => setShowRangePopup(false)}
+              style={{
+                background: '#f7931a',
+                color: '#000',
+                border: 'none',
+                borderRadius: '6px',
+                padding: '8px 16px',
+                cursor: 'pointer',
+                fontWeight: 'bold',
+              }}
+            >
+              Đóng
+            </button>
           </div>
         )}
       </div>
@@ -693,7 +805,19 @@ function CustomCandlestickChart({
           {timeframe.toUpperCase()})
         </div>
         <div style={{ fontSize: '12px', color: '#808080' }}>
-          💡 Hover để xem nến | 🖱️ Kéo thả để chọn range | {useRealData ? '🔴 Backend API' : '🟡 Mock Data'}
+          💡 Hover để xem nến | 🖱️ Double click nến 1 → Double click nến 2 →
+          Popup | {useRealData ? '🔴 Backend API' : '🟡 Mock Data'}
+          {isSelectingRange && (
+            <span
+              style={{
+                color: '#f7931a',
+                fontWeight: 'bold',
+                marginLeft: '10px',
+              }}
+            >
+              🎯 Đã chọn nến đầu! Double click nến thứ 2!
+            </span>
+          )}
         </div>
       </div>
     </div>
