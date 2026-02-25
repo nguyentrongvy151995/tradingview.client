@@ -1,12 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import {
-  createChart,
-  IChartApi,
-  CandlestickSeries,
-  Time,
-  LineSeries,
-  HistogramSeries,
-} from 'lightweight-charts';
+import { createChart, IChartApi, Time } from 'lightweight-charts';
 import { fetchCoinAnalysis, Candle } from './services/coinAnalysisApi';
 import { calculateMACD } from './utils/macdIndicator';
 import TradingToolbar from './components/TradingToolbar';
@@ -49,6 +42,9 @@ function CustomCandlestickChart({
 
   // Double click selection state
   const [isSelectingRange, setIsSelectingRange] = useState(false);
+
+  // MACD indicator toggle - set to false to disable MACD
+  const showMacd = true;
   const [firstClickTime, setFirstClickTime] = useState<Time | null>(null);
   const [selectedRangeData, setSelectedRangeData] = useState<any>(null);
   const [showRangePopup, setShowRangePopup] = useState(false);
@@ -58,172 +54,260 @@ function CustomCandlestickChart({
   const firstClickTimeRef = useRef<Time | null>(null);
 
   useEffect(() => {
-    if (
-      !chartContainerRef.current
-      // || !macdContainerRef.current
-    ) {
+    if (!chartContainerRef.current || (showMacd && !macdContainerRef.current)) {
       return;
     }
 
-    const chart = initChart();
+    // Clean up existing charts before creating new ones
+    if (chartRef.current) {
+      try {
+        chartRef.current.remove();
+      } catch (e) {
+        chartRef.current = null;
+      }
+    }
 
-    if (!chart) return;
+    if (macdChartRef.current) {
+      try {
+        macdChartRef.current.remove();
+      } catch (e) {
+        macdChartRef.current = null;
+      }
+    }
 
-    const candlestickSeries = addStyles(chart);
+    // Clear container contents to prevent duplicates
+    chartContainerRef.current.innerHTML = '';
+    if (showMacd && macdContainerRef.current) {
+      macdContainerRef.current.innerHTML = '';
+    }
+    try {
+      const chart = initChart();
 
-    if (!candlestickSeries) return;
+      if (!chart) {
+        return;
+      }
 
-    // Create MACD chart
-    // const macdChart = createChart(macdContainerRef.current, {
-    //   width: macdContainerRef.current.clientWidth,
-    //   height: 200,
-    //   layout: {
-    //     background: { color: '#1e222d' },
-    //     textColor: '#d1d4dc',
-    //   },
-    //   grid: {
-    //     vertLines: { color: '#2b2f3a' },
-    //     horzLines: { color: '#2b2f3a' },
-    //   },
-    //   crosshair: {
-    //     mode: 1,
-    //   },
-    //   timeScale: {
-    //     borderColor: '#2b2f3a',
-    //     timeVisible: true,
-    //     secondsVisible: false,
-    //     visible: false, // Hide time scale on MACD chart
-    //   },
-    //   rightPriceScale: {
-    //     borderColor: '#2b2f3a',
-    //   },
-    // });
+      const candlestickSeries = (chart as any).addCandlestickSeries({
+        upColor: '#26a69a',
+        downColor: '#ef5350',
+        wickUpColor: '#26a69a',
+        wickDownColor: '#ef5350',
+      });
 
-    // Add MACD series
-    // const macdLineSeries = macdChart.addSeries(LineSeries, {
-    //   color: '#2962ff',
-    //   lineWidth: 2,
-    //   title: 'MACD',
-    //   priceFormat: {
-    //     type: 'price',
-    //     precision: 4,
-    //     minMove: 0.0001,
-    //   },
-    // });
+      if (!candlestickSeries) {
+        return;
+      }
 
-    // const signalLineSeries = macdChart.addSeries(LineSeries, {
-    //   color: '#ff6d00',
-    //   lineWidth: 2,
-    //   title: 'Signal',
-    //   priceFormat: {
-    //     type: 'price',
-    //     precision: 4,
-    //     minMove: 0.0001,
-    //   },
-    // });
+      // Create MACD chart (conditional)
+      let macdChart: IChartApi | undefined, macdLineSeries: any, signalLineSeries: any, histogramSeries: any;
+      
+      if (showMacd) {
+        const macdChartData = initMacdChart();
+        if (!macdChartData) {
+          return;
+        }
 
-    // const histogramSeries = macdChart.addSeries(HistogramSeries, {
-    //   color: '#26a69a',
-    //   priceFormat: {
-    //     type: 'price',
-    //     precision: 4,
-    //     minMove: 0.0001,
-    //   },
-    // });
+        ({ macdChart, macdLineSeries, signalLineSeries, histogramSeries } = macdChartData);
 
-    // Sync time scales
-    // chart.timeScale().subscribeVisibleLogicalRangeChange((timeRange) => {
-    //   if (timeRange) {
-    //     macdChart.timeScale().setVisibleLogicalRange(timeRange);
-    //   }
-    // });
+        chart.timeScale().subscribeVisibleLogicalRangeChange((timeRange) => {
+          if (timeRange && macdChart) {
+            macdChart.timeScale().setVisibleLogicalRange(timeRange);
+          }
+        });
 
-    // macdChart.timeScale().subscribeVisibleLogicalRangeChange((timeRange) => {
-    //   if (timeRange) {
-    //     chart.timeScale().setVisibleLogicalRange(timeRange);
-    //   }
-    // });
+        macdChart.timeScale().subscribeVisibleLogicalRangeChange((timeRange) => {
+          if (timeRange) {
+            chart.timeScale().setVisibleLogicalRange(timeRange);
+          }
+        });
+      }
 
-    loadData(candlestickSeries);
+      loadData(
+        candlestickSeries,
+        macdLineSeries,
+        signalLineSeries,
+        histogramSeries,
+      );
 
-    chartRef.current = chart;
-    // macdChartRef.current = macdChart;
-    candlestickSeriesRef.current = candlestickSeries;
+      chartRef.current = chart;
+      if (showMacd && macdChart) {
+        macdChartRef.current = macdChart;
+      }
+      candlestickSeriesRef.current = candlestickSeries;
 
-    // Subscribe to crosshair move using wrapper function
-    const crosshairMoveWrapper = (param: any) => {
-      handleCrosshairMove(param, candlestickSeries);
-    };
+      // Subscribe to crosshair move using wrapper function
+      const crosshairMoveWrapper = (param: any) => {
+        handleCrosshairMove(param, candlestickSeries);
+      };
 
-    chart.subscribeCrosshairMove(crosshairMoveWrapper);
+      chart.subscribeCrosshairMove(crosshairMoveWrapper);
 
-    // Function to calculate range data from multiple candles
-    // const calculateRangeData = (startTime: Time, endTime: Time) => {
-    //   const data = candlestickSeries.data();
-    //   if (!data || data.length === 0) return;
+      const chartContainer = chartContainerRef.current;
+      if (!chartContainer) {
+        return;
+      }
 
-    //   // Ensure start is before end
-    //   const start = startTime < endTime ? startTime : endTime;
-    //   const end = startTime < endTime ? endTime : startTime;
+      const doubleClickWrapper = (event: MouseEvent) => {
+        handleDoubleClick(event, chart, chartContainer);
+      };
 
-    //   // Filter candles in range
-    //   const rangeCandles = data.filter((candle: any) =>
-    //     candle.time >= start && candle.time <= end
-    //   );
+      chartContainer.addEventListener('dblclick', doubleClickWrapper);
 
-    //   if (rangeCandles.length > 0) {
-    //     const opens = rangeCandles.map((c: any) => c.open);
-    //     const highs = rangeCandles.map((c: any) => c.high);
-    //     const lows = rangeCandles.map((c: any) => c.low);
-    //     const closes = rangeCandles.map((c: any) => c.close);
+      window.addEventListener('resize', handleResize);
 
-    //     const firstCandle = rangeCandles[0] as any;
-    //     const lastCandle = rangeCandles[rangeCandles.length - 1] as any;
-
-    //     const rangeData = {
-    //       startTime: start,
-    //       endTime: end,
-    //       count: rangeCandles.length,
-    //       firstOpen: firstCandle.open,
-    //       lastClose: lastCandle.close,
-    //       highestHigh: Math.max(...highs),
-    //       lowestLow: Math.min(...lows),
-    //       change: lastCandle.close - firstCandle.open,
-    //       changePercent: ((lastCandle.close - firstCandle.open) / firstCandle.open) * 100,
-    //     };
-
-    //     setSelectedRangeData(rangeData);
-    //     setShowRangePopup(true);
-    //   }
-    // };
-
-    // Add mouse event listeners for click selection
-    const chartContainer = chartContainerRef.current;
-
-    // Create wrapper function to pass chart and container to handleDoubleClick
-    const doubleClickWrapper = (event: MouseEvent) => {
-      handleDoubleClick(event, chart, chartContainer);
-    };
-
-    chartContainer.addEventListener('dblclick', doubleClickWrapper);
-
-    window.addEventListener('resize', handleResize);
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      chartContainer.removeEventListener('dblclick', doubleClickWrapper);
-      chart.remove();
-      // macdChart.remove();
-    };
+      return () => {
+        window.removeEventListener('resize', handleResize);
+        chartContainer.removeEventListener('dblclick', doubleClickWrapper);
+        chart.remove();
+        if (showMacd && macdChart) {
+          macdChart.remove();
+        }
+      };
+    } catch (error) {}
   }, [symbol, timeframe, useRealData]);
+
+  // Calculate dynamic height based on indicators and screen size
+  const calculateChartHeight = () => {
+    const screenHeight = window.innerHeight;
+    const toolbarHeight = 40; // Trading toolbar
+    const timeframeHeight = 60; // Timeframe selector
+    const macdHeight = showMacd ? 200 : 0; // MACD indicator (conditional)
+    const footerHeight = 80; // Footer info (increased)
+    const padding = 100; // More padding for safety
+
+    // Future indicators can be added here
+    // const rsiHeight = hasRSI ? 150 : 0;
+    // const volumeHeight = hasVolume ? 100 : 0;
+
+    const totalIndicatorsHeight = macdHeight; // + rsiHeight + volumeHeight
+    const availableHeight =
+      screenHeight -
+      toolbarHeight -
+      timeframeHeight -
+      totalIndicatorsHeight -
+      footerHeight -
+      padding;
+
+    return Math.max(availableHeight, 300); // Minimum 300px height
+  };
 
   const handleResize = () => {
     if (chartContainerRef.current && chartRef.current) {
       chartRef.current.applyOptions({
         width: chartContainerRef.current.clientWidth,
-        height: window.innerHeight - 200,
+        height: calculateChartHeight(), // Smart height calculation
       });
     }
+    if (macdContainerRef.current && macdChartRef.current) {
+      macdChartRef.current.applyOptions({
+        width: macdContainerRef.current.clientWidth,
+      });
+    }
+  };
+
+  // Initialize MACD chart
+  const initMacdChart = () => {
+    if (!macdContainerRef.current) return null;
+
+    const macdChart = createChart(macdContainerRef.current, {
+      width: macdContainerRef.current.clientWidth,
+      height: 200,
+      layout: {
+        background: { color: '#1e222d' },
+        textColor: '#d1d4dc',
+      },
+      grid: {
+        vertLines: { color: '#2b2f3a' },
+        horzLines: { color: '#2b2f3a' },
+      },
+      crosshair: {
+        mode: 1,
+      },
+      timeScale: {
+        borderColor: '#2b2f3a',
+        timeVisible: true,
+        secondsVisible: false,
+        visible: false, // Hide time scale on MACD chart
+      },
+      rightPriceScale: {
+        borderColor: '#2b2f3a',
+      },
+    });
+
+    // Add MACD series
+    const macdLineSeries = (macdChart as any).addLineSeries({
+      color: '#2962ff',
+      lineWidth: 2,
+      title: 'MACD',
+      priceFormat: {
+        type: 'price',
+        precision: 4,
+        minMove: 0.0001,
+      },
+    });
+
+    const signalLineSeries = (macdChart as any).addLineSeries({
+      color: '#ff6d00',
+      lineWidth: 2,
+      title: 'Signal',
+      priceFormat: {
+        type: 'price',
+        precision: 4,
+        minMove: 0.0001,
+      },
+    });
+
+    const histogramSeries = (macdChart as any).addHistogramSeries({
+      color: '#26a69a',
+      priceFormat: {
+        type: 'price',
+        precision: 4,
+        minMove: 0.0001,
+      },
+    });
+
+    return {
+      macdChart,
+      macdLineSeries,
+      signalLineSeries,
+      histogramSeries,
+    };
+  };
+
+  // Update MACD data
+  const updateMacdData = (
+    candleData: CandleData[],
+    macdLineSeries: any,
+    signalLineSeries: any,
+    histogramSeries: any,
+  ) => {
+    // Calculate and display MACD
+    const closePrices = candleData.map((c) => c.close);
+    const times = candleData.map((c) => c.time as string | number);
+    const macdData = calculateMACD(closePrices, times);
+
+    // Set MACD line data (filter out nulls)
+    const macdLineData = macdData
+      .filter((d) => d.macd !== null)
+      .map((d) => ({ time: d.time as Time, value: d.macd as number }));
+    macdLineSeries.setData(macdLineData);
+
+    // Set Signal line data (filter out nulls)
+    const signalLineData = macdData
+      .filter((d) => d.signal !== null)
+      .map((d) => ({ time: d.time as Time, value: d.signal as number }));
+    signalLineSeries.setData(signalLineData);
+
+    // Set Histogram data (filter out nulls and color based on positive/negative)
+    const histogramData = macdData
+      .filter((d) => d.histogram !== null)
+      .map((d) => ({
+        time: d.time as Time,
+        value: d.histogram as number,
+        color: (d.histogram as number) >= 0 ? '#26a69a' : '#ef5350',
+      }));
+    histogramSeries.setData(histogramData);
+
   };
 
   const handleDoubleClick = (
@@ -238,7 +322,6 @@ function CustomCandlestickChart({
     if (time) {
       if (!isSelectingRangeRef.current) {
         // First double click - start selection
-        console.log('🖱️ First double click at time:', time);
         isSelectingRangeRef.current = true;
         firstClickTimeRef.current = time;
         setIsSelectingRange(true);
@@ -303,9 +386,16 @@ function CustomCandlestickChart({
   const initChart = () => {
     if (!chartContainerRef.current) return;
 
+    const containerWidth = chartContainerRef.current.clientWidth || 800;
+    const containerHeight = calculateChartHeight(); // Smart height calculation
+
+    if (containerWidth <= 0 || containerHeight <= 0) {
+      return;
+    }
+
     const chart = createChart(chartContainerRef.current, {
-      width: chartContainerRef.current.clientWidth,
-      height: window.innerHeight - 200,
+      width: containerWidth,
+      height: containerHeight,
       layout: {
         background: { color: '#1e222d' },
         textColor: '#d1d4dc',
@@ -330,27 +420,13 @@ function CustomCandlestickChart({
     return chart;
   };
 
-  const addStyles = (chart: any) => {
-    if (!chart) return;
-
-    const candlestickSeries = chart.addSeries(CandlestickSeries, {
-      upColor: '#26a69a', // Green for bullish
-      downColor: '#ef5350', // Red for bearish
-      borderVisible: false,
-      wickUpColor: '#26a69a',
-      wickDownColor: '#ef5350',
-      priceFormat: {
-        type: 'price',
-        precision: 2,
-        minMove: 0.01,
-      },
-    });
-
-    return candlestickSeries;
-  };
-
   // Fetch and load data
-  const loadData = async (candlestickSeries: any) => {
+  const loadData = async (
+    candlestickSeries: any,
+    macdLineSeries?: any,
+    signalLineSeries?: any,
+    histogramSeries?: any,
+  ) => {
     setLoading(true);
     setError(null);
 
@@ -359,7 +435,6 @@ function CustomCandlestickChart({
 
       if (useRealData) {
         // Fetch real data from your backend API
-        console.log(`🔄 Fetching ${symbol} data (${timeframe})...`);
         const apiData = await fetchCoinAnalysis(symbol, timeframe);
         candleData = apiData.map((candle: Candle) => ({
           time: (typeof candle.time === 'string'
@@ -370,49 +445,25 @@ function CustomCandlestickChart({
           low: candle.low,
           close: candle.close,
         }));
-        console.log(`✅ Loaded ${candleData.length} candles from backend API`);
       } else {
         // Use mock data
         candleData = generateSampleData(timeframe);
-        console.log(`✅ Generated ${candleData.length} mock candles`);
       }
 
       candlestickSeries.setData(candleData);
 
-      // Calculate and display MACD
-      // const closePrices = candleData.map((c) => c.close);
-      // const times = candleData.map((c) => c.time as string | number);
-      // const macdData = calculateMACD(closePrices, times);
-
-      // Set MACD line data (filter out nulls)
-      // const macdLineData = macdData
-      //   .filter((d) => d.macd !== null)
-      //   .map((d) => ({ time: d.time as Time, value: d.macd as number }));
-      // macdLineSeries.setData(macdLineData);
-
-      // Set Signal line data (filter out nulls)
-      // const signalLineData = macdData
-      //   .filter((d) => d.signal !== null)
-      //   .map((d) => ({ time: d.time as Time, value: d.signal as number }));
-      // signalLineSeries.setData(signalLineData);
-
-      // Set Histogram data (filter out nulls and color based on positive/negative)
-      // const histogramData = macdData
-      //   .filter((d) => d.histogram !== null)
-      //   .map((d) => ({
-      //     time: d.time as Time,
-      //     value: d.histogram as number,
-      //     color: (d.histogram as number) >= 0 ? '#26a69a' : '#ef5350',
-      //   }));
-      // histogramSeries.setData(histogramData);
-
-      // console.log(
-      //   `✅ MACD calculated with ${macdLineData.length} data points`,
-      // );
+      // Calculate and display MACD if series are provided
+      if (macdLineSeries && signalLineSeries && histogramSeries) {
+        updateMacdData(
+          candleData,
+          macdLineSeries,
+          signalLineSeries,
+          histogramSeries,
+        );
+      }
 
       setLoading(false);
     } catch (err) {
-      console.error('❌ Error loading data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load data');
       setLoading(false);
 
@@ -421,63 +472,16 @@ function CustomCandlestickChart({
       candlestickSeries.setData(fallbackData);
 
       // Calculate MACD for fallback data too
-      // const closePrices = fallbackData.map((c) => c.close);
-      // const times = fallbackData.map((c) => c.time as string | number);
-      // const macdData = calculateMACD(closePrices, times);
-
-      // const macdLineData = macdData
-      //   .filter((d) => d.macd !== null)
-      //   .map((d) => ({ time: d.time as Time, value: d.macd as number }));
-      // macdLineSeries.setData(macdLineData);
-
-      // const signalLineData = macdData
-      //   .filter((d) => d.signal !== null)
-      //   .map((d) => ({ time: d.time as Time, value: d.signal as number }));
-      // signalLineSeries.setData(signalLineData);
-
-      // const histogramData = macdData
-      //   .filter((d) => d.histogram !== null)
-      //   .map((d) => ({
-      //     time: d.time as Time,
-      //     value: d.histogram as number,
-      //     color: (d.histogram as number) >= 0 ? '#26a69a' : '#ef5350',
-      //   }));
-      // histogramSeries.setData(histogramData);
+      if (macdLineSeries && signalLineSeries && histogramSeries) {
+        updateMacdData(
+          fallbackData,
+          macdLineSeries,
+          signalLineSeries,
+          histogramSeries,
+        );
+      }
     }
   };
-
-  // const handleDoubleClick = (event: MouseEvent, chartContainer: any, chart: any) => {
-  //   const rect = chartContainer.getBoundingClientRect();
-  //   const x = event.clientX - rect.left;
-  //   const time = chart.timeScale().coordinateToTime(x);
-
-  //   if (time) {
-  //     if (!isSelectingRangeRef.current) {
-  //       // First double click - start selection
-  //       isSelectingRangeRef.current = true;
-  //       firstClickTimeRef.current = time;
-  //       setIsSelectingRange(true);
-  //       setFirstClickTime(time);
-  //       setShowPopup(false);
-  //       setShowRangePopup(false);
-  //     } else {
-  //       // Show popup with test message
-  //       setSelectedRangeData({
-  //         message: 'test',
-  //         startTime: firstClickTimeRef.current,
-  //         endTime: time,
-  //       });
-  //       setShowRangePopup(true);
-  //       setShowPopup(false);
-
-  //       // Reset selection state
-  //       isSelectingRangeRef.current = false;
-  //       firstClickTimeRef.current = null;
-  //       setIsSelectingRange(false);
-  //       setFirstClickTime(null);
-  //     }
-  //   }
-  // };
 
   return (
     <div>
@@ -564,7 +568,12 @@ function CustomCandlestickChart({
 
       <div
         ref={chartContainerRef}
-        style={{ position: 'relative', width: '100%' }}
+        style={{
+          position: 'relative',
+          width: '100%',
+          height: `${calculateChartHeight()}px`, // Smart dynamic height
+          overflow: 'hidden', // Hide overflow content
+        }}
       >
         {/* Candle Data Popup */}
         {showPopup && popupData && popupPosition && (
@@ -729,33 +738,35 @@ function CustomCandlestickChart({
         )}
       </div>
 
-      {/* MACD Indicator Container */}
-      {/* <div
-        style={{
-          marginTop: '10px',
-          padding: '10px',
-          backgroundColor: '#1e222d',
-          borderRadius: '8px',
-        }}
-      >
+      {/* MACD Indicator Container - Conditional */}
+      {showMacd && (
         <div
           style={{
-            color: '#d1d4dc',
-            fontSize: '14px',
-            fontWeight: 'bold',
-            marginBottom: '10px',
-            paddingLeft: '10px',
+            marginTop: '10px',
+            padding: '10px',
+            backgroundColor: '#1e222d',
+            borderRadius: '8px',
           }}
         >
-          📈 MACD Indicator (12, 26, 9)
+          <div
+            style={{
+              color: '#d1d4dc',
+              fontSize: '14px',
+              fontWeight: 'bold',
+              marginBottom: '10px',
+              paddingLeft: '10px',
+            }}
+          >
+            📈 MACD Indicator (12, 26, 9)
+          </div>
+          <div
+            ref={macdContainerRef}
+            style={{ position: 'relative', width: '100%' }}
+          />
         </div>
-        <div
-          ref={macdContainerRef}
-          style={{ position: 'relative', width: '100%' }}
-        />
-      </div> */}
+      )}
 
-      <div
+      {/* <div
         style={{
           padding: '15px',
           fontSize: '14px',
@@ -784,7 +795,7 @@ function CustomCandlestickChart({
             </span>
           )}
         </div>
-      </div>
+      </div> */}
     </div>
   );
 }
