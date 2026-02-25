@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createChart, IChartApi, Time } from 'lightweight-charts';
 import { fetchCoinAnalysis, Candle } from './services/coinAnalysisApi';
 import { calculateMACD } from './utils/macdIndicator';
+import { calculateRSI } from './utils/rsiIndicator';
 import TradingToolbar from './components/TradingToolbar';
 
 interface CandleData {
@@ -25,8 +26,10 @@ function CustomCandlestickChart({
 }: CustomCandlestickChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const macdContainerRef = useRef<HTMLDivElement>(null);
+  const rsiContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const macdChartRef = useRef<IChartApi | null>(null);
+  const rsiChartRef = useRef<IChartApi | null>(null);
   const candlestickSeriesRef = useRef<any>(null);
   const [timeframe, setTimeframe] = useState<Timeframe>('1h');
   const [loading, setLoading] = useState<boolean>(false);
@@ -43,8 +46,9 @@ function CustomCandlestickChart({
   // Double click selection state
   const [isSelectingRange, setIsSelectingRange] = useState(false);
 
-  // MACD indicator toggle - set to false to disable MACD
-  const showMacd = true;
+  // Indicators toggles - set to false to disable
+  const showMacd = false;
+  const showRSI = true;
   const [firstClickTime, setFirstClickTime] = useState<Time | null>(null);
   const [selectedRangeData, setSelectedRangeData] = useState<any>(null);
   const [showRangePopup, setShowRangePopup] = useState(false);
@@ -54,7 +58,9 @@ function CustomCandlestickChart({
   const firstClickTimeRef = useRef<Time | null>(null);
 
   useEffect(() => {
-    if (!chartContainerRef.current || (showMacd && !macdContainerRef.current)) {
+    if (!chartContainerRef.current || 
+        (showMacd && !macdContainerRef.current) ||
+        (showRSI && !rsiContainerRef.current)) {
       return;
     }
 
@@ -75,10 +81,21 @@ function CustomCandlestickChart({
       }
     }
 
+    if (rsiChartRef.current) {
+      try {
+        rsiChartRef.current.remove();
+      } catch (e) {
+        rsiChartRef.current = null;
+      }
+    }
+
     // Clear container contents to prevent duplicates
     chartContainerRef.current.innerHTML = '';
     if (showMacd && macdContainerRef.current) {
       macdContainerRef.current.innerHTML = '';
+    }
+    if (showRSI && rsiContainerRef.current) {
+      rsiContainerRef.current.innerHTML = '';
     }
     try {
       const chart = initChart();
@@ -101,6 +118,9 @@ function CustomCandlestickChart({
       // Create MACD chart (conditional)
       let macdChart: IChartApi | undefined, macdLineSeries: any, signalLineSeries: any, histogramSeries: any;
       
+      // Create RSI chart (conditional)  
+      let rsiChart: IChartApi | undefined, rsiLineSeries: any, overboughtSeries: any, oversoldSeries: any;
+      
       if (showMacd) {
         const macdChartData = initMacdChart();
         if (!macdChartData) {
@@ -122,16 +142,44 @@ function CustomCandlestickChart({
         });
       }
 
+      if (showRSI) {
+        const rsiChartData = initRSIChart();
+        if (!rsiChartData) {
+          return;
+        }
+
+        ({ rsiChart, rsiLineSeries, overboughtSeries, oversoldSeries } = rsiChartData);
+
+        // Sync time scales with main chart
+        chart.timeScale().subscribeVisibleLogicalRangeChange((timeRange) => {
+          if (timeRange && rsiChart) {
+            rsiChart.timeScale().setVisibleLogicalRange(timeRange);
+          }
+        });
+
+        rsiChart.timeScale().subscribeVisibleLogicalRangeChange((timeRange) => {
+          if (timeRange) {
+            chart.timeScale().setVisibleLogicalRange(timeRange);
+          }
+        });
+      }
+
       loadData(
         candlestickSeries,
         macdLineSeries,
         signalLineSeries,
         histogramSeries,
+        rsiLineSeries,
+        overboughtSeries,
+        oversoldSeries,
       );
 
       chartRef.current = chart;
       if (showMacd && macdChart) {
         macdChartRef.current = macdChart;
+      }
+      if (showRSI && rsiChart) {
+        rsiChartRef.current = rsiChart;
       }
       candlestickSeriesRef.current = candlestickSeries;
 
@@ -162,6 +210,9 @@ function CustomCandlestickChart({
         if (showMacd && macdChart) {
           macdChart.remove();
         }
+        if (showRSI && rsiChart) {
+          rsiChart.remove();
+        }
       };
     } catch (error) {}
   }, [symbol, timeframe, useRealData]);
@@ -172,14 +223,14 @@ function CustomCandlestickChart({
     const toolbarHeight = 40; // Trading toolbar
     const timeframeHeight = 60; // Timeframe selector
     const macdHeight = showMacd ? 200 : 0; // MACD indicator (conditional)
+    const rsiHeight = showRSI ? 150 : 0; // RSI indicator (conditional)
     const footerHeight = 80; // Footer info (increased)
     const padding = 100; // More padding for safety
 
     // Future indicators can be added here
-    // const rsiHeight = hasRSI ? 150 : 0;
     // const volumeHeight = hasVolume ? 100 : 0;
 
-    const totalIndicatorsHeight = macdHeight; // + rsiHeight + volumeHeight
+    const totalIndicatorsHeight = macdHeight + rsiHeight; // + volumeHeight
     const availableHeight =
       screenHeight -
       toolbarHeight -
@@ -194,13 +245,18 @@ function CustomCandlestickChart({
   const handleResize = () => {
     if (chartContainerRef.current && chartRef.current) {
       chartRef.current.applyOptions({
-        width: chartContainerRef.current.clientWidth,
-        height: calculateChartHeight(), // Smart height calculation
+        width: chartContainerRef.current.clientWidth - 1, // Subtract 1px for border
+        height: calculateChartHeight(),
       });
     }
     if (macdContainerRef.current && macdChartRef.current) {
       macdChartRef.current.applyOptions({
-        width: macdContainerRef.current.clientWidth,
+        width: macdContainerRef.current.clientWidth - 1, // Subtract 1px for border
+      });
+    }
+    if (rsiContainerRef.current && rsiChartRef.current) {
+      rsiChartRef.current.applyOptions({
+        width: rsiContainerRef.current.clientWidth - 1, // Subtract 1px for border
       });
     }
   };
@@ -210,7 +266,7 @@ function CustomCandlestickChart({
     if (!macdContainerRef.current) return null;
 
     const macdChart = createChart(macdContainerRef.current, {
-      width: macdContainerRef.current.clientWidth,
+      width: macdContainerRef.current.clientWidth - 1, // Subtract 1px for border
       height: 200,
       layout: {
         background: { color: '#1e222d' },
@@ -274,6 +330,84 @@ function CustomCandlestickChart({
     };
   };
 
+  // Initialize RSI chart
+  const initRSIChart = () => {
+    if (!rsiContainerRef.current) return null;
+
+    const rsiChart = createChart(rsiContainerRef.current, {
+      width: rsiContainerRef.current.clientWidth - 1, // Subtract 1px for border
+      height: 150,
+      layout: {
+        background: { color: '#1e222d' },
+        textColor: '#d1d4dc',
+      },
+      grid: {
+        vertLines: { color: '#2b2f3a' },
+        horzLines: { color: '#2b2f3a' },
+      },
+      crosshair: {
+        mode: 1,
+      },
+      timeScale: {
+        borderColor: '#2b2f3a',
+        timeVisible: true,
+        secondsVisible: false,
+        visible: false, // Hide time scale on RSI chart
+      },
+      rightPriceScale: {
+        borderColor: '#2b2f3a',
+        scaleMargins: {
+          top: 0.1,
+          bottom: 0.1,
+        },
+        // Set RSI range 0-100
+        mode: 1, // Normal scale
+      },
+    });
+
+    // Add RSI line series
+    const rsiLineSeries = (rsiChart as any).addLineSeries({
+      color: '#9c27b0',
+      lineWidth: 2,
+      title: 'RSI',
+      priceFormat: {
+        type: 'price',
+        precision: 2,
+        minMove: 0.01,
+      },
+    });
+
+    // Add RSI overbought/oversold levels
+    const overboughtSeries = (rsiChart as any).addLineSeries({
+      color: '#ef5350',
+      lineWidth: 1,
+      lineStyle: 2, // Dashed line
+      title: 'Overbought (70)',
+      priceFormat: {
+        type: 'price',
+        precision: 0,
+      },
+    });
+
+    const oversoldSeries = (rsiChart as any).addLineSeries({
+      color: '#26a69a',
+      lineWidth: 1,
+      lineStyle: 2, // Dashed line
+      title: 'Oversold (30)',
+      priceFormat: {
+        type: 'price',
+        precision: 0,
+      },
+    });
+
+    return {
+      rsiChart,
+      rsiLineSeries,
+      overboughtSeries,
+      oversoldSeries,
+    };
+  };
+
   // Update MACD data
   const updateMacdData = (
     candleData: CandleData[],
@@ -308,6 +442,41 @@ function CustomCandlestickChart({
       }));
     histogramSeries.setData(histogramData);
 
+  };
+
+  // Update RSI data
+  const updateRSIData = (
+    candleData: CandleData[],
+    rsiLineSeries: any,
+    overboughtSeries: any,
+    oversoldSeries: any,
+  ) => {
+    // Calculate RSI
+    const closePrices = candleData.map((c) => c.close);
+    const times = candleData.map((c) => c.time as string | number);
+    const rsiData = calculateRSI(closePrices, times, 14);
+
+    // Set RSI line data (filter out nulls)
+    const rsiLineData = rsiData
+      .filter((d) => d.rsi !== null)
+      .map((d) => ({ time: d.time as Time, value: d.rsi as number }));
+    rsiLineSeries.setData(rsiLineData);
+
+    // Set overbought level (70)
+    const overboughtData = candleData.map((c) => ({ 
+      time: c.time, 
+      value: 70 
+    }));
+    overboughtSeries.setData(overboughtData);
+
+    // Set oversold level (30)
+    const oversoldData = candleData.map((c) => ({ 
+      time: c.time, 
+      value: 30 
+    }));
+    oversoldSeries.setData(oversoldData);
+
+    console.log(`✅ RSI calculated with ${rsiLineData.length} data points`);
   };
 
   const handleDoubleClick = (
@@ -386,7 +555,7 @@ function CustomCandlestickChart({
   const initChart = () => {
     if (!chartContainerRef.current) return;
 
-    const containerWidth = chartContainerRef.current.clientWidth || 800;
+    const containerWidth = (chartContainerRef.current.clientWidth || 800) - 1; // Subtract 1px for border
     const containerHeight = calculateChartHeight(); // Smart height calculation
 
     if (containerWidth <= 0 || containerHeight <= 0) {
@@ -426,6 +595,9 @@ function CustomCandlestickChart({
     macdLineSeries?: any,
     signalLineSeries?: any,
     histogramSeries?: any,
+    rsiLineSeries?: any,
+    overboughtSeries?: any,
+    oversoldSeries?: any,
   ) => {
     setLoading(true);
     setError(null);
@@ -462,6 +634,16 @@ function CustomCandlestickChart({
         );
       }
 
+      // Calculate and display RSI if series are provided
+      if (rsiLineSeries && overboughtSeries && oversoldSeries) {
+        updateRSIData(
+          candleData,
+          rsiLineSeries,
+          overboughtSeries,
+          oversoldSeries,
+        );
+      }
+
       setLoading(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data');
@@ -478,6 +660,16 @@ function CustomCandlestickChart({
           macdLineSeries,
           signalLineSeries,
           histogramSeries,
+        );
+      }
+
+      // Calculate RSI for fallback data too
+      if (rsiLineSeries && overboughtSeries && oversoldSeries) {
+        updateRSIData(
+          fallbackData,
+          rsiLineSeries,
+          overboughtSeries,
+          oversoldSeries,
         );
       }
     }
@@ -761,6 +953,34 @@ function CustomCandlestickChart({
           </div>
           <div
             ref={macdContainerRef}
+            style={{ position: 'relative', width: '100%' }}
+          />
+        </div>
+      )}
+
+      {/* RSI Indicator Container - Conditional */}
+      {showRSI && (
+        <div
+          style={{
+            marginTop: '10px',
+            padding: '10px',
+            backgroundColor: '#1e222d',
+            borderRadius: '8px',
+          }}
+        >
+          <div
+            style={{
+              color: '#d1d4dc',
+              fontSize: '14px',
+              fontWeight: 'bold',
+              marginBottom: '10px',
+              paddingLeft: '10px',
+            }}
+          >
+            📊 RSI Indicator (14)
+          </div>
+          <div
+            ref={rsiContainerRef}
             style={{ position: 'relative', width: '100%' }}
           />
         </div>
