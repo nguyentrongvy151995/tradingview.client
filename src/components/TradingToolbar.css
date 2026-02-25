@@ -1,0 +1,52 @@
+.trading-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background-color: #131722;
+  border-bottom: 1px solid #2b2f3a;
+  min-height: 40px;
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.toolbar-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: none;
+  border: 1px solid #2b2f3a;
+  border-radius: 4px;
+  color: #d1d4dc;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.toolbar-button:hover {
+  background-color: #2b2f3a;
+  border-color: #434651;
+}
+
+.toolbar-button:active {
+  background-color: #363a45;
+}
+
+.toolbar-button.active {
+  background-color: #f7931a;
+  border-color: #f7931a;
+  color: white;
+}
+
+.toolbar-separator {
+  width: 1px;
+  height: 24px;
+  background-color: #2b2f3a;
+  margin: 0 4px;
+}

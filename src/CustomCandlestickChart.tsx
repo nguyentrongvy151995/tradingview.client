@@ -9,6 +9,7 @@ import {
 } from 'lightweight-charts';
 import { fetchCoinAnalysis, Candle } from './services/coinAnalysisApi';
 import { calculateMACD } from './utils/macdIndicator';
+import TradingToolbar from './components/TradingToolbar';
 
 interface CandleData {
   time: Time;
@@ -56,8 +57,180 @@ function CustomCandlestickChart({
   const isSelectingRangeRef = useRef(false);
   const firstClickTimeRef = useRef<Time | null>(null);
 
-  // Handle double click event - moved outside useEffect
-  const handleDoubleClick = (event: MouseEvent, chart: IChartApi, chartContainer: HTMLDivElement) => {
+  useEffect(() => {
+    if (
+      !chartContainerRef.current
+      // || !macdContainerRef.current
+    ) {
+      return;
+    }
+
+    const chart = initChart();
+
+    if (!chart) return;
+
+    const candlestickSeries = addStyles(chart);
+
+    if (!candlestickSeries) return;
+
+    // Create MACD chart
+    // const macdChart = createChart(macdContainerRef.current, {
+    //   width: macdContainerRef.current.clientWidth,
+    //   height: 200,
+    //   layout: {
+    //     background: { color: '#1e222d' },
+    //     textColor: '#d1d4dc',
+    //   },
+    //   grid: {
+    //     vertLines: { color: '#2b2f3a' },
+    //     horzLines: { color: '#2b2f3a' },
+    //   },
+    //   crosshair: {
+    //     mode: 1,
+    //   },
+    //   timeScale: {
+    //     borderColor: '#2b2f3a',
+    //     timeVisible: true,
+    //     secondsVisible: false,
+    //     visible: false, // Hide time scale on MACD chart
+    //   },
+    //   rightPriceScale: {
+    //     borderColor: '#2b2f3a',
+    //   },
+    // });
+
+    // Add MACD series
+    // const macdLineSeries = macdChart.addSeries(LineSeries, {
+    //   color: '#2962ff',
+    //   lineWidth: 2,
+    //   title: 'MACD',
+    //   priceFormat: {
+    //     type: 'price',
+    //     precision: 4,
+    //     minMove: 0.0001,
+    //   },
+    // });
+
+    // const signalLineSeries = macdChart.addSeries(LineSeries, {
+    //   color: '#ff6d00',
+    //   lineWidth: 2,
+    //   title: 'Signal',
+    //   priceFormat: {
+    //     type: 'price',
+    //     precision: 4,
+    //     minMove: 0.0001,
+    //   },
+    // });
+
+    // const histogramSeries = macdChart.addSeries(HistogramSeries, {
+    //   color: '#26a69a',
+    //   priceFormat: {
+    //     type: 'price',
+    //     precision: 4,
+    //     minMove: 0.0001,
+    //   },
+    // });
+
+    // Sync time scales
+    // chart.timeScale().subscribeVisibleLogicalRangeChange((timeRange) => {
+    //   if (timeRange) {
+    //     macdChart.timeScale().setVisibleLogicalRange(timeRange);
+    //   }
+    // });
+
+    // macdChart.timeScale().subscribeVisibleLogicalRangeChange((timeRange) => {
+    //   if (timeRange) {
+    //     chart.timeScale().setVisibleLogicalRange(timeRange);
+    //   }
+    // });
+
+    loadData(candlestickSeries);
+
+    chartRef.current = chart;
+    // macdChartRef.current = macdChart;
+    candlestickSeriesRef.current = candlestickSeries;
+
+    // Subscribe to crosshair move using wrapper function
+    const crosshairMoveWrapper = (param: any) => {
+      handleCrosshairMove(param, candlestickSeries);
+    };
+
+    chart.subscribeCrosshairMove(crosshairMoveWrapper);
+
+    // Function to calculate range data from multiple candles
+    // const calculateRangeData = (startTime: Time, endTime: Time) => {
+    //   const data = candlestickSeries.data();
+    //   if (!data || data.length === 0) return;
+
+    //   // Ensure start is before end
+    //   const start = startTime < endTime ? startTime : endTime;
+    //   const end = startTime < endTime ? endTime : startTime;
+
+    //   // Filter candles in range
+    //   const rangeCandles = data.filter((candle: any) =>
+    //     candle.time >= start && candle.time <= end
+    //   );
+
+    //   if (rangeCandles.length > 0) {
+    //     const opens = rangeCandles.map((c: any) => c.open);
+    //     const highs = rangeCandles.map((c: any) => c.high);
+    //     const lows = rangeCandles.map((c: any) => c.low);
+    //     const closes = rangeCandles.map((c: any) => c.close);
+
+    //     const firstCandle = rangeCandles[0] as any;
+    //     const lastCandle = rangeCandles[rangeCandles.length - 1] as any;
+
+    //     const rangeData = {
+    //       startTime: start,
+    //       endTime: end,
+    //       count: rangeCandles.length,
+    //       firstOpen: firstCandle.open,
+    //       lastClose: lastCandle.close,
+    //       highestHigh: Math.max(...highs),
+    //       lowestLow: Math.min(...lows),
+    //       change: lastCandle.close - firstCandle.open,
+    //       changePercent: ((lastCandle.close - firstCandle.open) / firstCandle.open) * 100,
+    //     };
+
+    //     setSelectedRangeData(rangeData);
+    //     setShowRangePopup(true);
+    //   }
+    // };
+
+    // Add mouse event listeners for click selection
+    const chartContainer = chartContainerRef.current;
+
+    // Create wrapper function to pass chart and container to handleDoubleClick
+    const doubleClickWrapper = (event: MouseEvent) => {
+      handleDoubleClick(event, chart, chartContainer);
+    };
+
+    chartContainer.addEventListener('dblclick', doubleClickWrapper);
+
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      chartContainer.removeEventListener('dblclick', doubleClickWrapper);
+      chart.remove();
+      // macdChart.remove();
+    };
+  }, [symbol, timeframe, useRealData]);
+
+  const handleResize = () => {
+    if (chartContainerRef.current && chartRef.current) {
+      chartRef.current.applyOptions({
+        width: chartContainerRef.current.clientWidth,
+        height: window.innerHeight - 200,
+      });
+    }
+  };
+
+  const handleDoubleClick = (
+    event: MouseEvent,
+    chart: IChartApi,
+    chartContainer: HTMLDivElement,
+  ) => {
     const rect = chartContainer.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const time = chart.timeScale().coordinateToTime(x);
@@ -73,9 +246,6 @@ function CustomCandlestickChart({
         setShowPopup(false);
         setShowRangePopup(false);
       } else {
-        // Second double click - complete selection
-        console.log('🖱️ Second double click at time:', time, 'First was:', firstClickTimeRef.current);
-        // Show popup with test message
         setSelectedRangeData({
           message: 'test',
           startTime: firstClickTimeRef.current,
@@ -135,7 +305,7 @@ function CustomCandlestickChart({
 
     const chart = createChart(chartContainerRef.current, {
       width: chartContainerRef.current.clientWidth,
-      height: 600,
+      height: window.innerHeight - 200,
       layout: {
         background: { color: '#1e222d' },
         textColor: '#d1d4dc',
@@ -276,217 +446,6 @@ function CustomCandlestickChart({
     }
   };
 
-  useEffect(() => {
-    if (
-      !chartContainerRef.current
-      // || !macdContainerRef.current
-    )
-      return;
-
-    // Create main chart with dark theme (like real trading platforms)
-    // const chart = createChart(chartContainerRef.current, {
-    //   width: chartContainerRef.current.clientWidth,
-    //   height: 600,
-    //   layout: {
-    //     background: { color: '#1e222d' },
-    //     textColor: '#d1d4dc',
-    //   },
-    //   grid: {
-    //     vertLines: { color: '#2b2f3a' },
-    //     horzLines: { color: '#2b2f3a' },
-    //   },
-    //   crosshair: {
-    //     mode: 1,
-    //   },
-    //   timeScale: {
-    //     borderColor: '#2b2f3a',
-    //     timeVisible: true,
-    //     secondsVisible: false,
-    //   },
-    //   rightPriceScale: {
-    //     borderColor: '#2b2f3a',
-    //   },
-    // });
-
-    const chart = initChart();
-
-    if (!chart) return;
-
-    // const candlestickSeries = chart.addSeries(CandlestickSeries, {
-    //   upColor: '#26a69a', // Green for bullish
-    //   downColor: '#ef5350', // Red for bearish
-    //   borderVisible: false,
-    //   wickUpColor: '#26a69a',
-    //   wickDownColor: '#ef5350',
-    //   priceFormat: {
-    //     type: 'price',
-    //     precision: 2,
-    //     minMove: 0.01,
-    //   },
-    // });
-
-    const candlestickSeries = addStyles(chart);
-
-    if (!candlestickSeries) return;
-
-    // Create MACD chart
-    // const macdChart = createChart(macdContainerRef.current, {
-    //   width: macdContainerRef.current.clientWidth,
-    //   height: 200,
-    //   layout: {
-    //     background: { color: '#1e222d' },
-    //     textColor: '#d1d4dc',
-    //   },
-    //   grid: {
-    //     vertLines: { color: '#2b2f3a' },
-    //     horzLines: { color: '#2b2f3a' },
-    //   },
-    //   crosshair: {
-    //     mode: 1,
-    //   },
-    //   timeScale: {
-    //     borderColor: '#2b2f3a',
-    //     timeVisible: true,
-    //     secondsVisible: false,
-    //     visible: false, // Hide time scale on MACD chart
-    //   },
-    //   rightPriceScale: {
-    //     borderColor: '#2b2f3a',
-    //   },
-    // });
-
-    // Add MACD series
-    // const macdLineSeries = macdChart.addSeries(LineSeries, {
-    //   color: '#2962ff',
-    //   lineWidth: 2,
-    //   title: 'MACD',
-    //   priceFormat: {
-    //     type: 'price',
-    //     precision: 4,
-    //     minMove: 0.0001,
-    //   },
-    // });
-
-    // const signalLineSeries = macdChart.addSeries(LineSeries, {
-    //   color: '#ff6d00',
-    //   lineWidth: 2,
-    //   title: 'Signal',
-    //   priceFormat: {
-    //     type: 'price',
-    //     precision: 4,
-    //     minMove: 0.0001,
-    //   },
-    // });
-
-    // const histogramSeries = macdChart.addSeries(HistogramSeries, {
-    //   color: '#26a69a',
-    //   priceFormat: {
-    //     type: 'price',
-    //     precision: 4,
-    //     minMove: 0.0001,
-    //   },
-    // });
-
-    // Sync time scales
-    // chart.timeScale().subscribeVisibleLogicalRangeChange((timeRange) => {
-    //   if (timeRange) {
-    //     macdChart.timeScale().setVisibleLogicalRange(timeRange);
-    //   }
-    // });
-
-    // macdChart.timeScale().subscribeVisibleLogicalRangeChange((timeRange) => {
-    //   if (timeRange) {
-    //     chart.timeScale().setVisibleLogicalRange(timeRange);
-    //   }
-    // });
-
-    loadData(candlestickSeries);
-
-    chartRef.current = chart;
-    // macdChartRef.current = macdChart;
-    candlestickSeriesRef.current = candlestickSeries;
-
-    // Subscribe to crosshair move using wrapper function
-    const crosshairMoveWrapper = (param: any) => {
-      handleCrosshairMove(param, candlestickSeries);
-    };
-    
-    chart.subscribeCrosshairMove(crosshairMoveWrapper);
-
-    // Function to calculate range data from multiple candles
-    // const calculateRangeData = (startTime: Time, endTime: Time) => {
-    //   const data = candlestickSeries.data();
-    //   if (!data || data.length === 0) return;
-
-    //   // Ensure start is before end
-    //   const start = startTime < endTime ? startTime : endTime;
-    //   const end = startTime < endTime ? endTime : startTime;
-
-    //   // Filter candles in range
-    //   const rangeCandles = data.filter((candle: any) =>
-    //     candle.time >= start && candle.time <= end
-    //   );
-
-    //   if (rangeCandles.length > 0) {
-    //     const opens = rangeCandles.map((c: any) => c.open);
-    //     const highs = rangeCandles.map((c: any) => c.high);
-    //     const lows = rangeCandles.map((c: any) => c.low);
-    //     const closes = rangeCandles.map((c: any) => c.close);
-
-    //     const firstCandle = rangeCandles[0] as any;
-    //     const lastCandle = rangeCandles[rangeCandles.length - 1] as any;
-
-    //     const rangeData = {
-    //       startTime: start,
-    //       endTime: end,
-    //       count: rangeCandles.length,
-    //       firstOpen: firstCandle.open,
-    //       lastClose: lastCandle.close,
-    //       highestHigh: Math.max(...highs),
-    //       lowestLow: Math.min(...lows),
-    //       change: lastCandle.close - firstCandle.open,
-    //       changePercent: ((lastCandle.close - firstCandle.open) / firstCandle.open) * 100,
-    //     };
-
-    //     setSelectedRangeData(rangeData);
-    //     setShowRangePopup(true);
-    //   }
-    // };
-
-    // Add mouse event listeners for click selection
-    const chartContainer = chartContainerRef.current;
-
-    // Create wrapper function to pass chart and container to handleDoubleClick
-    const doubleClickWrapper = (event: MouseEvent) => {
-      handleDoubleClick(event, chart, chartContainer);
-    };
-
-    chartContainer.addEventListener('dblclick', doubleClickWrapper);
-
-    // Handle resize
-    const handleResize = () => {
-      if (chartContainerRef.current && chart) {
-        chart.applyOptions({
-          width: chartContainerRef.current.clientWidth,
-        });
-      }
-      // if (macdContainerRef.current && macdChart) {
-      //   macdChart.applyOptions({
-      //     width: macdContainerRef.current.clientWidth,
-      //   });
-      // }
-    };
-
-    window.addEventListener('resize', handleResize);
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      chartContainer.removeEventListener('dblclick', doubleClickWrapper);
-      chart.remove();
-      // macdChart.remove();
-    };
-  }, [symbol, timeframe, useRealData]);
-
   // const handleDoubleClick = (event: MouseEvent, chartContainer: any, chart: any) => {
   //   const rect = chartContainer.getBoundingClientRect();
   //   const x = event.clientX - rect.left;
@@ -522,7 +481,13 @@ function CustomCandlestickChart({
 
   return (
     <div>
-      {/* Timeframe Selector */}
+      <TradingToolbar
+        onDrawingToolSelect={(tool) => console.log('Selected tool:', tool)}
+        onIndicatorClick={() => console.log('Indicators clicked')}
+        onCompareClick={() => console.log('Compare clicked')}
+        onSettingsClick={() => console.log('Settings clicked')}
+        onFullscreenClick={() => console.log('Fullscreen clicked')}
+      />
       <div
         style={{
           padding: '15px 20px',
