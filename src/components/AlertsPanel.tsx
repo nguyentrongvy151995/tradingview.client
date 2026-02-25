@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import './AlertsPanel.css';
+import './AlertsPanel.scss';
 
 interface Alert {
   id: number;

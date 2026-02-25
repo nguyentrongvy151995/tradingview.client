@@ -1,5 +1,5 @@
 import React from 'react';
-import './TradingToolbar.css';
+import './TradingToolbar.scss';
 
 interface TradingToolbarProps {
   onDrawingToolSelect?: (tool: string) => void;

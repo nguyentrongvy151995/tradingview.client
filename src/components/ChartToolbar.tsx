@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import './ChartToolbar.css';
+import './ChartToolbar.scss';
 
 export type DrawingTool =
   | 'cursor'
