@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createChart, IChartApi, Time } from 'lightweight-charts';
-import { fetchCoinAnalysis, Candle } from './services/coinAnalysisApi';
-import { calculateMACD } from './utils/macdIndicator';
-import { calculateRSI } from './utils/rsiIndicator';
-import TradingToolbar from './components/TradingToolbar';
+import { fetchCoinAnalysis, Candle } from '../services/coinAnalysisApiService';
+import { calculateMACD } from '../utils/macdIndicator';
+import { calculateRSI } from '../utils/rsiIndicator';
+import TradingToolbar from './TradingToolbar';
 
 interface CandleData {
   time: Time;

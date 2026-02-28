@@ -1,6 +1,6 @@
 import React from 'react';
 import './App.scss';
-import CustomCandlestickChart from './CustomCandlestickChart';
+import CustomCandlestickChart from './components/CustomCandlestickChart';
 
 function App() {
   return (

@@ -7,6 +7,8 @@ interface TradingToolbarProps {
   onCompareClick?: () => void;
   onSettingsClick?: () => void;
   onFullscreenClick?: () => void;
+  onTimeframeSelect?: (timeframe: string) => void;
+  activeTimeframe?: string;
 }
 
 const TradingToolbar: React.FC<TradingToolbarProps> = ({
@@ -14,7 +16,9 @@ const TradingToolbar: React.FC<TradingToolbarProps> = ({
   onIndicatorClick,
   onCompareClick,
   onSettingsClick,
-  onFullscreenClick
+  onFullscreenClick,
+  onTimeframeSelect,
+  activeTimeframe
 }) => {
   return (
     <div className="trading-toolbar">
@@ -87,6 +91,23 @@ const TradingToolbar: React.FC<TradingToolbarProps> = ({
         >
           ⛶
         </button>
+      </div>
+
+      {/* Spacer to push timeframes to right */}
+      <div style={{ flex: 1 }} />
+
+      {/* Timeframe Buttons */}
+      <div className="toolbar-group timeframe-group">
+        {['5m', '15m', '1h'].map((tf) => (
+          <button 
+            key={tf}
+            className={`toolbar-button timeframe-button ${activeTimeframe === tf ? 'active' : ''}`}
+            onClick={() => onTimeframeSelect?.(tf)}
+            title={`${tf} timeframe`}
+          >
+            {tf.toUpperCase()}
+          </button>
+        ))}
       </div>
     </div>
   );
