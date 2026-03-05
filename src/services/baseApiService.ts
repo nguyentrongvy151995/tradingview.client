@@ -35,7 +35,7 @@ let globalConfig: ApiConfig = {
     'Accept': 'application/json',
     'Content-Type': 'application/json',
   },
-  timeout: 15000, // 15 second timeout for longer requests
+  timeout: 150000, // 15 second timeout for longer requests
 };
 
 /**

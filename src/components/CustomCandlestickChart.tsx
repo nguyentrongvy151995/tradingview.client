@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createChart, IChartApi, Time } from 'lightweight-charts';
-import { fetchCoinAnalysis, Candle } from '../services/coinAnalysisApiService';
+import { fetchCoinAnalysis, Candle, fetchCandleData } from '../services/coinAnalysisApiService';
 import { calculateMACD } from '../utils/macdIndicator';
 import { calculateRSI } from '../utils/rsiIndicator';
 import TradingToolbar from './TradingToolbar';
@@ -675,6 +675,10 @@ function CustomCandlestickChart({
     }
   };
 
+  const fetchCandleByTime = async (time: string) => {
+    fetchCandleData('BTCUSDT', time);
+  }
+
   return (
     <div>
       <TradingToolbar
@@ -683,6 +687,8 @@ function CustomCandlestickChart({
         onCompareClick={() => console.log('Compare clicked')}
         onSettingsClick={() => console.log('Settings clicked')}
         onFullscreenClick={() => console.log('Fullscreen clicked')}
+        onTimeframeSelect={fetchCandleByTime}
+        activeTimeframe={timeframe}
       />
       <div
         style={{
