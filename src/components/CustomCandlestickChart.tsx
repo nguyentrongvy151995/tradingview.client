@@ -48,7 +48,7 @@ function CustomCandlestickChart({
 
   // Indicators toggles - set to false to disable
   const showMacd = false;
-  const showRSI = true;
+  const showRSI = false;
   const [firstClickTime, setFirstClickTime] = useState<Time | null>(null);
   const [selectedRangeData, setSelectedRangeData] = useState<any>(null);
   const [showRangePopup, setShowRangePopup] = useState(false);
@@ -64,6 +64,105 @@ function CustomCandlestickChart({
       return;
     }
 
+    removeChart();
+
+    // Clear container contents to prevent duplicates
+    chartContainerRef.current.innerHTML = '';
+    if (showMacd && macdContainerRef.current) {
+      macdContainerRef.current.innerHTML = '';
+    }
+    if (showRSI && rsiContainerRef.current) {
+      rsiContainerRef.current.innerHTML = '';
+    }
+
+    const chart = initChart();
+
+    if (!chart) {
+      return;
+    }
+
+    const candlestickSeries = addCandlestickSeries(chart);
+
+    if (!candlestickSeries) {
+      return;
+    }
+
+    handleChart(
+      chart,
+      candlestickSeries,
+    );
+
+    chartRef.current = chart;
+
+    // Subscribe to crosshair move using wrapper function
+    const crosshairMoveWrapper = (param: any) => {
+      handleCrosshairMove(param, candlestickSeries);
+    };
+
+    chart.subscribeCrosshairMove(crosshairMoveWrapper);
+
+    const chartContainer = chartContainerRef.current;
+    if (!chartContainer) {
+      return;
+    }
+
+    const doubleClickWrapper = (event: MouseEvent) => {
+      handleDoubleClick(event, chart, chartContainer);
+    };
+
+    chartContainer.addEventListener('dblclick', doubleClickWrapper);
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      chartContainer.removeEventListener('dblclick', doubleClickWrapper);
+      chart.remove();
+      // if (showMacd && macdChart) {
+      //   macdChart.remove();
+      // }
+      // if (showRSI && rsiChart) {
+      //   rsiChart.remove();
+      // }
+    };
+  }, [symbol, timeframe, useRealData]);
+
+  const handleChart = async (
+    chart: any,
+    candlestickSeries: any,
+  ) => {
+    const data = await fetchCoinAnalysis(symbol, timeframe);
+    let candleData: CandleData[];
+
+    candleData = data.map((candle: Candle) => ({
+      time: (typeof candle.time === 'string'
+        ? candle.time
+        : candle.time) as Time,
+      open: candle.open,
+      high: candle.high,
+      low: candle.low,
+      close: candle.close,
+    }));
+
+    loadCandlestick(
+      candlestickSeries,
+      candleData,
+    );
+    loadRSI(chart, candleData);
+    loadMacd(chart, candleData);
+  }
+
+  const addCandlestickSeries = (chart: IChartApi) => {
+    const candlestickSeries = (chart as IChartApi).addCandlestickSeries({
+      upColor: '#26a69a',
+      downColor: '#ef5350',
+      wickUpColor: '#26a69a',
+      wickDownColor: '#ef5350',
+    });
+
+    return candlestickSeries;
+  }
+
+  const removeChart = () => {
     // Clean up existing charts before creating new ones
     if (chartRef.current) {
       try {
@@ -88,136 +187,8 @@ function CustomCandlestickChart({
         rsiChartRef.current = null;
       }
     }
+  };
 
-    // Clear container contents to prevent duplicates
-    chartContainerRef.current.innerHTML = '';
-    if (showMacd && macdContainerRef.current) {
-      macdContainerRef.current.innerHTML = '';
-    }
-    if (showRSI && rsiContainerRef.current) {
-      rsiContainerRef.current.innerHTML = '';
-    }
-    try {
-      const chart = initChart();
-
-      if (!chart) {
-        return;
-      }
-
-      const candlestickSeries = (chart as any).addCandlestickSeries({
-        upColor: '#26a69a',
-        downColor: '#ef5350',
-        wickUpColor: '#26a69a',
-        wickDownColor: '#ef5350',
-      });
-
-      if (!candlestickSeries) {
-        return;
-      }
-
-      // Create MACD chart (conditional)
-      let macdChart: IChartApi | undefined, macdLineSeries: any, signalLineSeries: any, histogramSeries: any;
-      
-      // Create RSI chart (conditional)  
-      let rsiChart: IChartApi | undefined, rsiLineSeries: any, overboughtSeries: any, oversoldSeries: any;
-      
-      if (showMacd) {
-        const macdChartData = initMacdChart();
-        if (!macdChartData) {
-          return;
-        }
-
-        ({ macdChart, macdLineSeries, signalLineSeries, histogramSeries } = macdChartData);
-
-        chart.timeScale().subscribeVisibleLogicalRangeChange((timeRange) => {
-          if (timeRange && macdChart) {
-            macdChart.timeScale().setVisibleLogicalRange(timeRange);
-          }
-        });
-
-        macdChart.timeScale().subscribeVisibleLogicalRangeChange((timeRange) => {
-          if (timeRange) {
-            chart.timeScale().setVisibleLogicalRange(timeRange);
-          }
-        });
-      }
-
-      if (showRSI) {
-        const rsiChartData = initRSIChart();
-        if (!rsiChartData) {
-          return;
-        }
-
-        ({ rsiChart, rsiLineSeries, overboughtSeries, oversoldSeries } = rsiChartData);
-
-        // Sync time scales with main chart
-        chart.timeScale().subscribeVisibleLogicalRangeChange((timeRange) => {
-          if (timeRange && rsiChart) {
-            rsiChart.timeScale().setVisibleLogicalRange(timeRange);
-          }
-        });
-
-        rsiChart.timeScale().subscribeVisibleLogicalRangeChange((timeRange) => {
-          if (timeRange) {
-            chart.timeScale().setVisibleLogicalRange(timeRange);
-          }
-        });
-      }
-
-      loadData(
-        candlestickSeries,
-        macdLineSeries,
-        signalLineSeries,
-        histogramSeries,
-        rsiLineSeries,
-        overboughtSeries,
-        oversoldSeries,
-      );
-
-      chartRef.current = chart;
-      if (showMacd && macdChart) {
-        macdChartRef.current = macdChart;
-      }
-      if (showRSI && rsiChart) {
-        rsiChartRef.current = rsiChart;
-      }
-      candlestickSeriesRef.current = candlestickSeries;
-
-      // Subscribe to crosshair move using wrapper function
-      const crosshairMoveWrapper = (param: any) => {
-        handleCrosshairMove(param, candlestickSeries);
-      };
-
-      chart.subscribeCrosshairMove(crosshairMoveWrapper);
-
-      const chartContainer = chartContainerRef.current;
-      if (!chartContainer) {
-        return;
-      }
-
-      const doubleClickWrapper = (event: MouseEvent) => {
-        handleDoubleClick(event, chart, chartContainer);
-      };
-
-      chartContainer.addEventListener('dblclick', doubleClickWrapper);
-
-      window.addEventListener('resize', handleResize);
-
-      return () => {
-        window.removeEventListener('resize', handleResize);
-        chartContainer.removeEventListener('dblclick', doubleClickWrapper);
-        chart.remove();
-        if (showMacd && macdChart) {
-          macdChart.remove();
-        }
-        if (showRSI && rsiChart) {
-          rsiChart.remove();
-        }
-      };
-    } catch (error) {}
-  }, [symbol, timeframe, useRealData]);
-
-  // Calculate dynamic height based on indicators and screen size
   const calculateChartHeight = () => {
     const screenHeight = window.innerHeight;
     const toolbarHeight = 40; // Trading toolbar
@@ -415,6 +386,8 @@ function CustomCandlestickChart({
     signalLineSeries: any,
     histogramSeries: any,
   ) => {
+    if (!macdLineSeries || !signalLineSeries || !histogramSeries) return;
+
     // Calculate and display MACD
     const closePrices = candleData.map((c) => c.close);
     const times = candleData.map((c) => c.time as string | number);
@@ -441,7 +414,6 @@ function CustomCandlestickChart({
         color: (d.histogram as number) >= 0 ? '#26a69a' : '#ef5350',
       }));
     histogramSeries.setData(histogramData);
-
   };
 
   // Update RSI data
@@ -451,6 +423,8 @@ function CustomCandlestickChart({
     overboughtSeries: any,
     oversoldSeries: any,
   ) => {
+    if (!rsiLineSeries || !overboughtSeries || !oversoldSeries) return;
+
     // Calculate RSI
     const closePrices = candleData.map((c) => c.close);
     const times = candleData.map((c) => c.time as string | number);
@@ -555,8 +529,8 @@ function CustomCandlestickChart({
   const initChart = () => {
     if (!chartContainerRef.current) return;
 
-    const containerWidth = (chartContainerRef.current.clientWidth || 800) - 1; // Subtract 1px for border
-    const containerHeight = calculateChartHeight(); // Smart height calculation
+    const containerWidth = (chartContainerRef.current.clientWidth || 800) - 1;
+    const containerHeight = calculateChartHeight();
 
     if (containerWidth <= 0 || containerHeight <= 0) {
       return;
@@ -589,94 +563,98 @@ function CustomCandlestickChart({
     return chart;
   };
 
-  // Fetch and load data
-  const loadData = async (
+  const loadCandlestick = async (
     candlestickSeries: any,
-    macdLineSeries?: any,
-    signalLineSeries?: any,
-    histogramSeries?: any,
-    rsiLineSeries?: any,
-    overboughtSeries?: any,
-    oversoldSeries?: any,
+    candleData: any,
   ) => {
     setLoading(true);
     setError(null);
-
-    try {
-      let candleData: CandleData[];
-
-      if (useRealData) {
-        // Fetch real data from your backend API
-        const apiData = await fetchCoinAnalysis(symbol, timeframe);
-        candleData = apiData.map((candle: Candle) => ({
-          time: (typeof candle.time === 'string'
-            ? candle.time
-            : candle.time) as Time,
-          open: candle.open,
-          high: candle.high,
-          low: candle.low,
-          close: candle.close,
-        }));
-      } else {
-        // Use mock data
-        candleData = generateSampleData(timeframe);
-      }
-
-      candlestickSeries.setData(candleData);
-
-      // Calculate and display MACD if series are provided
-      if (macdLineSeries && signalLineSeries && histogramSeries) {
-        updateMacdData(
-          candleData,
-          macdLineSeries,
-          signalLineSeries,
-          histogramSeries,
-        );
-      }
-
-      // Calculate and display RSI if series are provided
-      if (rsiLineSeries && overboughtSeries && oversoldSeries) {
-        updateRSIData(
-          candleData,
-          rsiLineSeries,
-          overboughtSeries,
-          oversoldSeries,
-        );
-      }
-
-      setLoading(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load data');
-      setLoading(false);
-
-      // Fallback to mock data on error
-      const fallbackData = generateSampleData(timeframe);
-      candlestickSeries.setData(fallbackData);
-
-      // Calculate MACD for fallback data too
-      if (macdLineSeries && signalLineSeries && histogramSeries) {
-        updateMacdData(
-          fallbackData,
-          macdLineSeries,
-          signalLineSeries,
-          histogramSeries,
-        );
-      }
-
-      // Calculate RSI for fallback data too
-      if (rsiLineSeries && overboughtSeries && oversoldSeries) {
-        updateRSIData(
-          fallbackData,
-          rsiLineSeries,
-          overboughtSeries,
-          oversoldSeries,
-        );
-      }
-    }
+    await candlestickSeries.setData(candleData);
+    setLoading(false);
   };
 
+  const loadRSI = async (chart: IChartApi, candleData: any) => {
+    let rsiChart: IChartApi | undefined;
+    let rsiLineSeries: any;
+    let overboughtSeries: any;
+    let oversoldSeries: any;
+
+    if (!showRSI) return;
+    const rsiChartData = initRSIChart();
+    if (!rsiChartData) {
+      return;
+    }
+
+    ({ rsiChart, rsiLineSeries, overboughtSeries, oversoldSeries } = rsiChartData);
+
+    // Sync time scales with main chart
+    chart.timeScale().subscribeVisibleLogicalRangeChange((timeRange) => {
+      if (timeRange && rsiChart) {
+        rsiChart.timeScale().setVisibleLogicalRange(timeRange);
+      }
+    });
+
+    rsiChart.timeScale().subscribeVisibleLogicalRangeChange((timeRange) => {
+      if (timeRange) {
+        chart.timeScale().setVisibleLogicalRange(timeRange);
+      }
+    });
+
+    updateRSIData(
+      candleData,
+      rsiLineSeries,
+      overboughtSeries,
+      oversoldSeries,
+    );
+  }
+
+  const loadMacd = (chart: IChartApi, candleData: any) => {
+    let macdChart: IChartApi | undefined;
+    let macdLineSeries: any;
+    let signalLineSeries: any;
+    let histogramSeries: any;
+    
+    if (!showMacd) return;
+
+    const macdChartData = initMacdChart();
+    if (!macdChartData) {
+      return;
+    }
+
+    ({ macdChart, macdLineSeries, signalLineSeries, histogramSeries } = macdChartData);
+
+    chart.timeScale().subscribeVisibleLogicalRangeChange((timeRange) => {
+      if (timeRange && macdChart) {
+        macdChart.timeScale().setVisibleLogicalRange(timeRange);
+      }
+    });
+
+    macdChart.timeScale().subscribeVisibleLogicalRangeChange((timeRange) => {
+      if (timeRange) {
+        chart.timeScale().setVisibleLogicalRange(timeRange);
+      }
+    });
+
+    if (macdLineSeries && signalLineSeries && histogramSeries) {
+      updateMacdData(
+        candleData,
+        macdLineSeries,
+        signalLineSeries,
+        histogramSeries,
+      );
+    }
+  }
+
   const fetchCandleByTime = async (time: string) => {
-    fetchCandleData('BTCUSDT', time);
+    setLoading(true);
+    setError(null);
+    try {
+      await fetchCandleData('BTCUSDT', time);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch candle data');
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -737,18 +715,7 @@ function CustomCandlestickChart({
           </button>
         ))}
 
-        {/* Loading indicator */}
-        {loading && (
-          <span
-            style={{
-              color: '#f7931a',
-              marginLeft: '10px',
-              fontSize: '14px',
-            }}
-          >
-            ⏳ Loading...
-          </span>
-        )}
+
 
         {/* Error indicator */}
         {error && (
@@ -773,6 +740,40 @@ function CustomCandlestickChart({
           overflow: 'hidden', // Hide overflow content
         }}
       >
+        {/* Loading overlay */}
+        {loading && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'rgba(30, 34, 45, 0.85)',
+              zIndex: 999,
+              backdropFilter: 'blur(2px)',
+            }}
+          >
+            <div style={{ textAlign: 'center' }}>
+              <div
+                style={{
+                  width: '48px',
+                  height: '48px',
+                  border: '4px solid #2b2f3a',
+                  borderTop: '4px solid #f7931a',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite',
+                  margin: '0 auto 12px',
+                }}
+              />
+              <div style={{ color: '#d1d4dc', fontSize: '14px' }}>Loading...</div>
+              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+            </div>
+          </div>
+        )}
         {/* Candle Data Popup */}
         {showPopup && popupData && popupPosition && (
           <div

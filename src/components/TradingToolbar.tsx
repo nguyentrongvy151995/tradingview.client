@@ -98,6 +98,9 @@ const TradingToolbar: React.FC<TradingToolbarProps> = ({
 
       {/* Timeframe Buttons */}
       <div className="toolbar-group timeframe-group">
+        <div className="toolbar-button timeframe-button">
+          Fetch data
+        </div>
         {['5m', '15m', '1h', '4h', '1d'].map((tf) => (
           <button 
             key={tf}
